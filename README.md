@@ -24,7 +24,17 @@ Inspired by [RunCat](https://kyome.io/runcat/index.html).
 
 ## Installation
 
-### Option 1: Build & Run directly
+### Option 1: Homebrew (recommended)
+
+```bash
+brew install Ketchio-dev/tap/menuwatt
+```
+
+### Option 2: Download directly
+
+Go to [Releases](https://github.com/Ketchio-dev/MenuWatt/releases), download `ChargeCat.zip`, unzip, and drag to Applications.
+
+### Option 3: Build & Run directly
 
 ```bash
 git clone https://github.com/Ketchio-dev/MenuWatt.git
