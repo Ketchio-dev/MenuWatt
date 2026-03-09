@@ -1,6 +1,6 @@
 import Darwin
 import Foundation
-import BoochiCore
+import MenuWattCore
 
 public final class LiveSystemSnapshotReader {
     private var previousCPUCounters: CPUCounters?

@@ -1,7 +1,7 @@
 import AppKit
 import SwiftUI
-import BoochiCore
-import BoochiSystem
+import MenuWattCore
+import MenuWattSystem
 
 @MainActor
 final class PowerMonitor: ObservableObject {

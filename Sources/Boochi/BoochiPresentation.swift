@@ -1,5 +1,5 @@
 import SwiftUI
-import BoochiCore
+import MenuWattCore
 
 struct BoochiPresentation {
     let title: String

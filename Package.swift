@@ -2,36 +2,36 @@
 import PackageDescription
 
 let package = Package(
-    name: "Boochi",
+    name: "MenuWatt",
     platforms: [
         .macOS(.v13)
     ],
     products: [
-        .executable(name: "Boochi", targets: ["Boochi"])
+        .executable(name: "MenuWatt", targets: ["MenuWatt"])
     ],
     dependencies: [
         .package(url: "https://github.com/swiftlang/swift-testing.git", exact: "6.2.4")
     ],
     targets: [
         .target(
-            name: "BoochiCore",
+            name: "MenuWattCore",
             path: "Sources/BoochiCore"
         ),
         .target(
-            name: "BoochiSystem",
-            dependencies: ["BoochiCore"],
+            name: "MenuWattSystem",
+            dependencies: ["MenuWattCore"],
             path: "Sources/BoochiSystem"
         ),
         .executableTarget(
-            name: "Boochi",
-            dependencies: ["BoochiCore", "BoochiSystem"],
+            name: "MenuWatt",
+            dependencies: ["MenuWattCore", "MenuWattSystem"],
             path: "Sources/Boochi"
         ),
         .testTarget(
-            name: "BoochiTests",
+            name: "MenuWattTests",
             dependencies: [
-                "Boochi",
-                "BoochiCore",
+                "MenuWatt",
+                "MenuWattCore",
                 .product(name: "Testing", package: "swift-testing")
             ],
             path: "Tests/BoochiTests"

@@ -1,4 +1,4 @@
-import BoochiCore
+import MenuWattCore
 
 public actor LiveMonitorSampler: MonitorSampling {
     private let batteryReader: LiveBatterySnapshotReader

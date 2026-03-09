@@ -1,7 +1,7 @@
 import Foundation
 import Testing
-@testable import Boochi
-@testable import BoochiCore
+@testable import MenuWatt
+@testable import MenuWattCore
 
 actor TestSampler: MonitorSampling {
     struct Response {

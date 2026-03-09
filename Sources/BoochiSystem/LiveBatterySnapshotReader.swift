@@ -1,7 +1,7 @@
 import Foundation
 import IOKit
 import IOKit.ps
-import BoochiCore
+import MenuWattCore
 
 public struct LiveBatterySnapshotReader {
     public init() {}

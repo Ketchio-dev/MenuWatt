@@ -3,19 +3,25 @@
 set -euo pipefail
 
 ROOT_DIR="$(cd "$(dirname "$0")/.." && pwd)"
-APP_NAME="Boochi"
+APP_NAME="MenuWatt"
+BUILD_DIR="$ROOT_DIR/.build-app"
 
 cd "$ROOT_DIR"
 
-swift build -c release
+swift build -c release --scratch-path "$BUILD_DIR"
 
-BIN_PATH="$(swift build -c release --show-bin-path)"
+BIN_PATH="$(find "$BUILD_DIR" -type f -path "*/release/$APP_NAME" | head -n 1)"
+if [[ -z "$BIN_PATH" ]]; then
+  echo "Could not locate release binary for $APP_NAME" >&2
+  exit 1
+fi
+
 APP_DIR="$ROOT_DIR/.build/${APP_NAME}.app"
 
 rm -rf "$APP_DIR"
 mkdir -p "$APP_DIR/Contents/MacOS" "$APP_DIR/Contents/Resources"
 
-cp "$BIN_PATH/$APP_NAME" "$APP_DIR/Contents/MacOS/$APP_NAME"
+cp "$BIN_PATH" "$APP_DIR/Contents/MacOS/$APP_NAME"
 cp "$ROOT_DIR/Packaging/Info.plist" "$APP_DIR/Contents/Info.plist"
 
 codesign --force --deep --sign - "$APP_DIR" >/dev/null 2>&1 || true

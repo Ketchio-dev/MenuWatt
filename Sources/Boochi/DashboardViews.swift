@@ -1,6 +1,6 @@
 import AppKit
 import SwiftUI
-import BoochiCore
+import MenuWattCore
 
 struct MonitorPanelView: View {
     let battery: BatterySnapshot

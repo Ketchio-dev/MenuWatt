@@ -2,7 +2,7 @@ import AppKit
 import SwiftUI
 
 @main
-struct BoochiApp: App {
+struct MenuWattApp: App {
     @NSApplicationDelegateAdaptor(AppDelegate.self) private var appDelegate
     @StateObject private var monitor: PowerMonitor
 
@@ -31,7 +31,7 @@ struct BoochiApp: App {
 
                 Spacer()
 
-                Button("Quit Boochi") {
+                Button("Quit MenuWatt") {
                     monitor.stop()
                     NSApp.terminate(nil)
                 }
