@@ -67,18 +67,6 @@ Recommended release assets:
 - `MenuWatt.dmg` for the easiest drag-and-drop install
 - `MenuWatt.zip` as a fallback
 
-### For Developers
-
-If you want to run MenuWatt directly from source:
-
-- macOS 13 or later
-- Xcode Command Line Tools
-
-```bash
-xcode-select --install
-swift run
-```
-
 ### Automated Install
 
 If you want a one-command installer, provide an `install.sh` script that downloads the latest notarized release and installs `MenuWatt.app` into `/Applications`.
