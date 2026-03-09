@@ -52,32 +52,19 @@ MenuWatt is split into three targets:
 
 ## Install
 
-### For Most Users
+1. Download `MenuWatt.dmg` from the [latest release](https://github.com/Ketchio-dev/MenuWatt/releases/latest).
+2. Open the DMG and drag `MenuWatt.app` into your **Applications** folder.
+3. Launch MenuWatt from Applications.
 
-Download the latest app bundle from GitHub Releases, open it, and move `MenuWatt.app` into your `Applications` folder.
-
-When you publish releases, link this section to:
-
-```text
-https://github.com/Ketchio-dev/MenuWatt/releases/latest
-```
-
-Recommended release assets:
-
-- `MenuWatt.dmg` for the easiest drag-and-drop install
-- `MenuWatt.zip` as a fallback
-
-### Automated Install
-
-If you want a one-command installer, provide an `install.sh` script that downloads the latest notarized release and installs `MenuWatt.app` into `/Applications`.
-
-Example usage:
-
-```bash
-curl -fsSL https://example.com/menuwatt/install.sh | sh
-```
-
-This should be treated as a convenience path for power users, not the primary install method.
+> **First launch note:** MenuWatt is not yet notarized with Apple, so macOS may block the first launch. To fix this, run the following command in Terminal:
+>
+> ```bash
+> xattr -cr /Applications/MenuWatt.app
+> ```
+>
+> Or, if you prefer the GUI: go to **System Settings > Privacy & Security**, scroll down, and click **Open Anyway**.
+>
+> This is only needed once.
 
 ## How It Works
 
@@ -97,10 +84,7 @@ MenuWatt reads battery data directly through Apple's **IOKit** framework with no
 ## Notes
 
 - MenuWatt is a menu bar utility, so it launches as an accessory app rather than a dock app.
-- The generated bundle name is `MenuWatt.app`.
-- The best default distribution is a notarized DMG or ZIP on GitHub Releases.
-- `curl | sh` is best kept as an optional install path for CLI-friendly users.
-- If you plan to publish releases on GitHub, add screenshots or a short demo GIF near the top of this README.
+- The app is not yet notarized with Apple. See the install section above for the Gatekeeper workaround.
 
 ## Contributing
 

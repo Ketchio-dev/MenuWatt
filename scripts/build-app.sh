@@ -4,7 +4,7 @@ set -euo pipefail
 
 ROOT_DIR="$(cd "$(dirname "$0")/.." && pwd)"
 APP_NAME="MenuWatt"
-BUILD_DIR="$ROOT_DIR/.build-app"
+BUILD_DIR="/tmp/MenuWattBuild"
 
 cd "$ROOT_DIR"
 
@@ -23,6 +23,9 @@ mkdir -p "$APP_DIR/Contents/MacOS" "$APP_DIR/Contents/Resources"
 
 cp "$BIN_PATH" "$APP_DIR/Contents/MacOS/$APP_NAME"
 cp "$ROOT_DIR/Packaging/Info.plist" "$APP_DIR/Contents/Info.plist"
+if [ -f "$ROOT_DIR/Packaging/Resources/AppIcon.icns" ]; then
+  cp "$ROOT_DIR/Packaging/Resources/AppIcon.icns" "$APP_DIR/Contents/Resources/AppIcon.icns"
+fi
 
 codesign --force --deep --sign - "$APP_DIR" >/dev/null 2>&1 || true
 
