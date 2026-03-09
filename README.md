@@ -50,24 +50,50 @@ MenuWatt is split into three targets:
 | `MenuWattSystem` | macOS-specific live readers for battery and system metrics |
 | `MenuWatt` | Menu bar UI, animation, presentation mapping, and app lifecycle |
 
-## Run Locally
+## Install
 
-### Requirements
+### For Most Users
+
+Download the latest app bundle from GitHub Releases, open it, and move `MenuWatt.app` into your `Applications` folder.
+
+When you publish releases, link this section to:
+
+```text
+https://github.com/Ketchio-dev/MenuWatt/releases/latest
+```
+
+Recommended release assets:
+
+- `MenuWatt.dmg` for the easiest drag-and-drop install
+- `MenuWatt.zip` as a fallback
+
+### For Developers
+
+If you want to run MenuWatt directly from source:
 
 - macOS 13 or later
 - Xcode Command Line Tools
 
 ```bash
 xcode-select --install
-```
-
-### Development Build
-
-```bash
 swift run
 ```
 
-### Build the App Bundle
+### Automated Install
+
+If you want a one-command installer, provide an `install.sh` script that downloads the latest notarized release and installs `MenuWatt.app` into `/Applications`.
+
+Example usage:
+
+```bash
+curl -fsSL https://example.com/menuwatt/install.sh | sh
+```
+
+This should be treated as a convenience path for power users, not the primary install method.
+
+### Build the App Bundle Locally
+
+If you are packaging or testing the app bundle yourself:
 
 ```bash
 ./scripts/build-app.sh
@@ -99,6 +125,8 @@ MenuWatt reads battery data directly through Apple's **IOKit** framework with no
 
 - MenuWatt is a menu bar utility, so it launches as an accessory app rather than a dock app.
 - The generated bundle name is `MenuWatt.app`.
+- The best default distribution is a notarized DMG or ZIP on GitHub Releases.
+- `curl | sh` is best kept as an optional install path for CLI-friendly users.
 - If you plan to publish releases on GitHub, add screenshots or a short demo GIF near the top of this README.
 
 ## Contributing
