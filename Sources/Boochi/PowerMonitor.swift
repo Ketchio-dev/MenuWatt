@@ -26,6 +26,7 @@ final class PowerMonitor: ObservableObject {
     private var animationLoopTask: Task<Void, Never>?
     private var frameIndex = 0
     private var refreshSequence: UInt64 = 0
+    private var isRunning = false
 
     private let sampler: any MonitorSampling
     private let configuration: Configuration
@@ -42,6 +43,8 @@ final class PowerMonitor: ObservableObject {
     }
 
     func start() {
+        isRunning = true
+
         if refreshLoopTask == nil {
             requestRefresh(resetAnimation: true)
             refreshLoopTask = Task { [weak self] in
@@ -57,6 +60,9 @@ final class PowerMonitor: ObservableObject {
     }
 
     func stop() {
+        isRunning = false
+        refreshSequence &+= 1
+
         refreshLoopTask?.cancel()
         refreshLoopTask = nil
 
@@ -93,6 +99,8 @@ final class PowerMonitor: ObservableObject {
     }
 
     private func requestRefresh(resetAnimation: Bool) {
+        guard isRunning else { return }
+
         refreshSequence &+= 1
         let sequence = refreshSequence
 
@@ -107,7 +115,7 @@ final class PowerMonitor: ObservableObject {
     }
 
     private func applyIfCurrent(_ payload: SamplePayload, resetAnimation: Bool, sequence: UInt64) {
-        guard sequence == refreshSequence else { return }
+        guard isRunning, sequence == refreshSequence else { return }
         apply(payload, resetAnimation: resetAnimation)
         refreshTask = nil
     }

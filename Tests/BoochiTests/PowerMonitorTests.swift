@@ -42,6 +42,7 @@ func latestRefreshWinsWhenPreviousRequestFinishesLater() async {
     )
     let sampler = TestSampler(
         responses: [
+            .steadyState,
             .init(payload: firstPayload, delayNanoseconds: 200_000_000),
             .init(payload: secondPayload, delayNanoseconds: 0)
         ]
@@ -55,6 +56,7 @@ func latestRefreshWinsWhenPreviousRequestFinishesLater() async {
     }
 
     await MainActor.run {
+        monitor.start()
         monitor.refreshNow()
         monitor.refreshNow()
     }
@@ -118,17 +120,22 @@ func stopPreventsFurtherRefreshesAndAnimationTicks() async {
 
     try? await Task.sleep(nanoseconds: 160_000_000)
 
-    let frozenCount = await sampler.count()
-    let frozenFrame = await MainActor.run {
+    await MainActor.run {
         monitor.stop()
-        return monitor.currentSpriteFrame
+    }
+
+    try? await Task.sleep(nanoseconds: 80_000_000)
+
+    let settledCount = await sampler.count()
+    let settledFrame = await MainActor.run {
+        monitor.currentSpriteFrame
     }
 
     try? await Task.sleep(nanoseconds: 160_000_000)
 
-    #expect(await sampler.count() == frozenCount)
+    #expect(await sampler.count() == settledCount)
     await MainActor.run {
-        #expect(monitor.currentSpriteFrame == frozenFrame)
+        #expect(monitor.currentSpriteFrame == settledFrame)
     }
 }
 

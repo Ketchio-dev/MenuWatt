@@ -5,6 +5,7 @@ import SwiftUI
 struct MenuWattApp: App {
     @NSApplicationDelegateAdaptor(AppDelegate.self) private var appDelegate
     @StateObject private var monitor: PowerMonitor
+    @StateObject private var preferences = AppPreferences()
 
     init() {
         let monitor = PowerMonitor()
@@ -20,6 +21,32 @@ struct MenuWattApp: App {
                 sprite: monitor.currentFrame
             )
             .frame(width: 340)
+
+            Divider()
+
+            VStack(alignment: .leading, spacing: 6) {
+                Toggle(
+                    "Launch at Login",
+                    isOn: Binding(
+                        get: { preferences.launchesAtLogin },
+                        set: { preferences.setLaunchAtLogin($0) }
+                    )
+                )
+                .toggleStyle(.switch)
+                .font(.system(size: 12))
+
+                if let launchAtLoginError = preferences.launchAtLoginError {
+                    Text(launchAtLoginError)
+                        .font(.system(size: 11))
+                        .foregroundStyle(.secondary)
+                        .fixedSize(horizontal: false, vertical: true)
+                        .onTapGesture {
+                            preferences.dismissLaunchAtLoginError()
+                        }
+                }
+            }
+            .padding(.horizontal, 14)
+            .padding(.vertical, 10)
 
             Divider()
 
