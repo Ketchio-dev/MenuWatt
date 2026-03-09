@@ -25,15 +25,23 @@ struct MenuWattApp: App {
             Divider()
 
             VStack(alignment: .leading, spacing: 6) {
-                Toggle(
-                    "Launch at Login",
-                    isOn: Binding(
-                        get: { preferences.launchesAtLogin },
-                        set: { preferences.setLaunchAtLogin($0) }
+                HStack(spacing: 8) {
+                    Text("Launch at Login")
+                        .font(.system(size: 12))
+
+                    Spacer()
+
+                    Toggle(
+                        "",
+                        isOn: Binding(
+                            get: { preferences.launchesAtLogin },
+                            set: { preferences.setLaunchAtLogin($0) }
+                        )
                     )
-                )
-                .toggleStyle(.switch)
-                .font(.system(size: 12))
+                    .labelsHidden()
+                    .toggleStyle(.switch)
+                    .controlSize(.small)
+                }
 
                 if let launchAtLoginError = preferences.launchAtLoginError {
                     Text(launchAtLoginError)
@@ -45,10 +53,9 @@ struct MenuWattApp: App {
                         }
                 }
             }
+            .foregroundStyle(.secondary)
             .padding(.horizontal, 14)
-            .padding(.vertical, 10)
-
-            Divider()
+            .padding(.vertical, 6)
 
             HStack(spacing: 8) {
                 Button("Refresh") {
