@@ -91,21 +91,6 @@ curl -fsSL https://example.com/menuwatt/install.sh | sh
 
 This should be treated as a convenience path for power users, not the primary install method.
 
-### Build the App Bundle Locally
-
-If you are packaging or testing the app bundle yourself:
-
-```bash
-./scripts/build-app.sh
-open .build/MenuWatt.app
-```
-
-### Run Tests
-
-```bash
-swift test
-```
-
 ## How It Works
 
 MenuWatt reads battery data directly through Apple's **IOKit** framework with no runtime dependencies, background daemons, or network calls. System metrics (CPU, memory, storage) are gathered via `host_statistics` and filesystem APIs.
