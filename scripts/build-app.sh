@@ -3,7 +3,7 @@
 set -euo pipefail
 
 ROOT_DIR="$(cd "$(dirname "$0")/.." && pwd)"
-APP_NAME="ChargeCat"
+APP_NAME="Boochi"
 
 cd "$ROOT_DIR"
 

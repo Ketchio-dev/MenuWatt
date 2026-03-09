@@ -5,13 +5,13 @@
     <key>CFBundleDevelopmentRegion</key>
     <string>en</string>
     <key>CFBundleExecutable</key>
-    <string>ChargeCat</string>
+    <string>Boochi</string>
     <key>CFBundleIdentifier</key>
-    <string>com.junsu.chargecat</string>
+    <string>com.junsu.boochi</string>
     <key>CFBundleInfoDictionaryVersion</key>
     <string>6.0</string>
     <key>CFBundleName</key>
-    <string>ChargeCat</string>
+    <string>Boochi</string>
     <key>CFBundlePackageType</key>
     <string>APPL</string>
     <key>CFBundleShortVersionString</key>

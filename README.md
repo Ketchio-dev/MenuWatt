@@ -1,37 +1,37 @@
 <p align="center">
-  <h1 align="center">MenuWatt ⚡🐱</h1>
+  <h1 align="center">Boochi ⚡🐱</h1>
   <p align="center">
-    A tiny macOS menu bar app with an animated pixel cat that monitors your Mac's battery, CPU, memory, and storage in real time.
+    A native macOS menu bar app with a running pixel boochi and live battery, CPU, memory, and storage stats.
   </p>
   <p align="center">
-    <a href="https://github.com/Ketchio-dev/MenuWatt/releases/latest"><img src="https://img.shields.io/github/v/release/Ketchio-dev/MenuWatt?style=flat-square&color=blue" alt="Release"></a>
     <img src="https://img.shields.io/badge/platform-macOS%2013%2B-lightgrey?style=flat-square" alt="Platform">
-    <img src="https://img.shields.io/badge/swift-6.1-orange?style=flat-square" alt="Swift">
+    <img src="https://img.shields.io/badge/swift-6.2-orange?style=flat-square" alt="Swift">
     <a href="LICENSE"><img src="https://img.shields.io/badge/license-MIT-green?style=flat-square" alt="License"></a>
   </p>
 </p>
 
 ---
 
-## What is MenuWatt?
+## What Is Boochi?
 
-MenuWatt lives in your menu bar as a small pixel cat. The cat **reacts to your charging state** — it runs while charging, sits idle on adapter, and sleeps on battery. Click the icon to open a dashboard with real-time system metrics.
+Boochi lives in your menu bar as a tiny running companion. It gives you a quick view of live power usage and opens into a compact dashboard for battery, CPU, memory, and storage details.
 
-Inspired by [RunCat](https://kyome.io/runcat/index.html), built entirely in Swift with zero dependencies.
+Inspired by [RunCat](https://kyome.io/runcat/index.html), Boochi is built in Swift with zero runtime dependencies. Tests use the official `swift-testing` package.
 
 ## Features
 
-🐱 **Animated Pixel Cat** — changes behavior based on charging state
+- **Animated pixel boochi**: runs in every battery state, with speed driven by current system load.
+- **Live wattage in the menu bar**: surfaces current power input or system load without opening the panel.
+- **Compact system dashboard**: shows battery, CPU, memory, and storage metrics in one menu bar panel.
+- **Native macOS app**: SwiftUI + AppKit, no Electron, no web wrapper, no background services.
 
-| Charging State | Cat Behavior |
+| Charging State | Boochi Behavior |
 |-|-|
 | Charging | Runs fast (speed scales with charge rate) |
-| Plugged in (full) | Sits idle |
-| On battery | Sleeps |
+| Plugged in (full) | Runs |
+| On battery | Runs |
 
-⚡ **Live Wattage** — shows real-time power input (W) in the menu bar
-
-📊 **System Dashboard** — click the menu bar icon to see:
+The dashboard includes:
 
 | Metric | Details |
 |-|-|
@@ -40,37 +40,49 @@ Inspired by [RunCat](https://kyome.io/runcat/index.html), built entirely in Swif
 | Memory | Pressure level, used/wired/compressed/cached/swap breakdown |
 | Storage | Used vs total with visual progress bar |
 
-## Install
+## Architecture
 
-### Homebrew (recommended)
+Boochi is split into three targets:
+
+| Target | Responsibility |
+|-|-|
+| `BoochiCore` | Shared models, snapshots, formatting helpers, and sampling contracts |
+| `BoochiSystem` | macOS-specific live readers for battery and system metrics |
+| `Boochi` | Menu bar UI, animation, presentation mapping, and app lifecycle |
+
+## Run Locally
+
+### Requirements
+
+- macOS 13 or later
+- Xcode Command Line Tools
 
 ```bash
-brew install Ketchio-dev/tap/menuwatt
+xcode-select --install
 ```
 
-### Direct Download
-
-Download the latest `.zip` from [**Releases**](https://github.com/Ketchio-dev/MenuWatt/releases/latest), unzip, and drag `ChargeCat.app` into your **Applications** folder.
-
-### Build from Source
+### Development Build
 
 ```bash
-git clone https://github.com/Ketchio-dev/MenuWatt.git
-cd MenuWatt
-
-# Run directly
 swift run
-
-# Or build a .app bundle
-./scripts/build-app.sh
-open .build/ChargeCat.app
 ```
 
-> **Requirements:** macOS 13+ and Xcode Command Line Tools (`xcode-select --install`). Full Xcode is not needed.
+### Build the App Bundle
+
+```bash
+./scripts/build-app.sh
+open .build/Boochi.app
+```
+
+### Run Tests
+
+```bash
+swift test
+```
 
 ## How It Works
 
-MenuWatt reads battery data directly through Apple's **IOKit** framework — no third-party libraries, no background daemons, no network calls. System metrics (CPU, memory, storage) are gathered via `host_statistics` and `statvfs`.
+Boochi reads battery data directly through Apple's **IOKit** framework with no runtime dependencies, background daemons, or network calls. System metrics (CPU, memory, storage) are gathered via `host_statistics` and filesystem APIs.
 
 ## Tech Stack
 
@@ -80,7 +92,14 @@ MenuWatt reads battery data directly through Apple's **IOKit** framework — no 
 | Battery Data | IOKit (IOPSCopyPowerSourcesInfo) |
 | CPU/Memory | Mach host_statistics64 |
 | Build System | Swift Package Manager |
+| Test Framework | swift-testing |
 | Min Deployment | macOS 13.0 (Ventura) |
+
+## Notes
+
+- Boochi is a menu bar utility, so it launches as an accessory app rather than a dock app.
+- The generated bundle name is `Boochi.app`.
+- If you plan to publish releases on GitHub, add screenshots or a short demo GIF near the top of this README.
 
 ## Contributing
 

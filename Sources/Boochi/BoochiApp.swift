@@ -2,9 +2,15 @@ import AppKit
 import SwiftUI
 
 @main
-struct ChargeCatApp: App {
+struct BoochiApp: App {
     @NSApplicationDelegateAdaptor(AppDelegate.self) private var appDelegate
-    @StateObject private var monitor = PowerMonitor()
+    @StateObject private var monitor: PowerMonitor
+
+    init() {
+        let monitor = PowerMonitor()
+        monitor.start()
+        _monitor = StateObject(wrappedValue: monitor)
+    }
 
     var body: some Scene {
         MenuBarExtra {
@@ -25,7 +31,8 @@ struct ChargeCatApp: App {
 
                 Spacer()
 
-                Button("Quit ChargeCat") {
+                Button("Quit Boochi") {
+                    monitor.stop()
                     NSApp.terminate(nil)
                 }
                 .keyboardShortcut("q", modifiers: .command)
@@ -45,7 +52,7 @@ struct ChargeCatApp: App {
                         .monospacedDigit()
                 }
             }
-            .help(monitor.snapshot.tooltip)
+            .help(BoochiPresentation.tooltip(for: monitor.snapshot))
         }
         .menuBarExtraStyle(.window)
 

@@ -1,7 +1,6 @@
 import AppKit
 import SwiftUI
-
-// MARK: - Panel
+import BoochiCore
 
 struct MonitorPanelView: View {
     let battery: BatterySnapshot
@@ -31,13 +30,13 @@ struct MonitorPanelView: View {
     }
 }
 
-// MARK: - Hero
-
 struct HeroRow: View {
     let battery: BatterySnapshot
     let sprite: NSImage
 
     var body: some View {
+        let presentation = BoochiPresentation.make(for: battery.state)
+
         HStack(spacing: 10) {
             Image(nsImage: sprite)
                 .resizable()
@@ -48,9 +47,9 @@ struct HeroRow: View {
                 .font(.system(size: 20, weight: .semibold, design: .monospaced))
                 .monospacedDigit()
 
-            Text(battery.state.title)
+            Text(presentation.title)
                 .font(.system(size: 12, weight: .medium))
-                .foregroundStyle(battery.state.themeColor)
+                .foregroundStyle(presentation.themeColor)
 
             Spacer()
 
@@ -66,14 +65,14 @@ struct HeroRow: View {
     }
 }
 
-// MARK: - Battery
-
 struct BatterySection: View {
     let snapshot: BatterySnapshot
 
     var body: some View {
+        let presentation = BoochiPresentation.make(for: snapshot.state)
+
         VStack(alignment: .leading, spacing: 5) {
-            NativeProgressBar(value: Double(snapshot.percentage) / 100, tint: snapshot.state.themeColor)
+            NativeProgressBar(value: Double(snapshot.percentage) / 100, tint: presentation.themeColor)
 
             HStack(spacing: 0) {
                 if let liveInput = snapshot.liveInputDetail {
@@ -100,8 +99,6 @@ struct BatterySection: View {
         .padding(.vertical, 6)
     }
 }
-
-// MARK: - CPU
 
 struct CPUSection: View {
     let snapshot: CPUSnapshot
@@ -142,8 +139,6 @@ struct CPUSection: View {
     }
 }
 
-// MARK: - Memory
-
 struct MemorySection: View {
     let snapshot: MemorySnapshot
 
@@ -160,7 +155,10 @@ struct MemorySection: View {
                     .monospacedDigit()
             }
 
-            NativeProgressBar(value: snapshot.usedPercent / 100, tint: snapshot.pressureLevel.themeColor)
+            NativeProgressBar(
+                value: snapshot.usedPercent / 100,
+                tint: PressureLevelPresentation.themeColor(for: snapshot.pressureLevel)
+            )
 
             HStack(spacing: 0) {
                 InlineMetric(label: "Used", value: Formatters.bytes(snapshot.usedBytes))
@@ -177,8 +175,6 @@ struct MemorySection: View {
         .padding(.vertical, 6)
     }
 }
-
-// MARK: - Storage
 
 struct StorageSection: View {
     let snapshot: StorageSnapshot
@@ -211,8 +207,6 @@ struct StorageSection: View {
         return .cyan
     }
 }
-
-// MARK: - Compact Components
 
 struct InlineMetric: View {
     let label: String
@@ -256,19 +250,19 @@ struct PressureBadge: View {
     let level: PressureLevel
 
     var body: some View {
+        let themeColor = PressureLevelPresentation.themeColor(for: level)
+
         Text(level.title)
             .font(.system(size: 9, weight: .semibold))
-            .foregroundStyle(level.themeColor)
+            .foregroundStyle(themeColor)
             .padding(.horizontal, 5)
             .padding(.vertical, 2)
             .background(
                 Capsule(style: .continuous)
-                    .fill(level.themeColor.opacity(0.12))
+                    .fill(themeColor.opacity(0.12))
             )
     }
 }
-
-// MARK: - Mini Graph
 
 struct MiniGraphView: View {
     let primarySamples: [Double]

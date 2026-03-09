@@ -1,155 +1,20 @@
 import Darwin
-import SwiftUI
+import Foundation
+import BoochiCore
 
-struct HistoryBuffer {
-    private(set) var samples: [Double] = []
-    let maxCount: Int
-
-    init(maxCount: Int = 30) {
-        self.maxCount = maxCount
-    }
-
-    mutating func append(_ value: Double) {
-        if samples.count >= maxCount {
-            samples.removeFirst()
-        }
-        samples.append(value)
-    }
-}
-
-struct SystemSnapshot: Sendable {
-    let cpu: CPUSnapshot
-    let memory: MemorySnapshot
-    let storage: StorageSnapshot
-
-    static let unavailable = SystemSnapshot(
-        cpu: .unavailable,
-        memory: .unavailable,
-        storage: .unavailable
-    )
-}
-
-struct CPUSnapshot: Sendable {
-    let totalUsage: Double
-    let userUsage: Double
-    let systemUsage: Double
-    let idleUsage: Double
-    let history: [Double]
-
-    static let unavailable = CPUSnapshot(totalUsage: 0, userUsage: 0, systemUsage: 0, idleUsage: 100, history: [])
-
-    var titleValue: String {
-        String(format: "%.1f%%", totalUsage)
-    }
-
-    var detailLines: [String] {
-        [
-            String(format: "System: %.1f%%", systemUsage),
-            String(format: "User: %.1f%%", userUsage),
-            String(format: "Idle: %.1f%%", idleUsage)
-        ]
-    }
-}
-
-struct MemorySnapshot: Sendable {
-    let usedPercent: Double
-    let pressurePercent: Double
-    let pressureLevel: PressureLevel
-    let usedBytes: UInt64
-    let appMemoryBytes: UInt64
-    let wiredMemoryBytes: UInt64
-    let compressedBytes: UInt64
-    let cachedFilesBytes: UInt64
-    let swapUsedBytes: UInt64
-    let pressureHistory: [Double]
-
-    static let unavailable = MemorySnapshot(
-        usedPercent: 0,
-        pressurePercent: 0,
-        pressureLevel: .normal,
-        usedBytes: 0,
-        appMemoryBytes: 0,
-        wiredMemoryBytes: 0,
-        compressedBytes: 0,
-        cachedFilesBytes: 0,
-        swapUsedBytes: 0,
-        pressureHistory: []
-    )
-
-    var titleValue: String {
-        String(format: "%.1f%%", usedPercent)
-    }
-
-    var detailLines: [String] {
-        [
-            "Pressure: \(pressureLevel.title)",
-            "Memory used: \(Formatters.bytes(usedBytes))",
-            "App memory: \(Formatters.bytes(appMemoryBytes))",
-            "Wired memory: \(Formatters.bytes(wiredMemoryBytes))",
-            "Compressed: \(Formatters.bytes(compressedBytes))",
-            "Cached files: \(Formatters.bytes(cachedFilesBytes))",
-            "Swap used: \(Formatters.bytes(swapUsedBytes))"
-        ]
-    }
-}
-
-struct StorageSnapshot: Sendable {
-    let usedPercent: Double
-    let usedBytes: UInt64
-    let totalBytes: UInt64
-
-    static let unavailable = StorageSnapshot(usedPercent: 0, usedBytes: 0, totalBytes: 0)
-
-    var titleValue: String {
-        String(format: "%.1f%% used", usedPercent)
-    }
-
-    var detailLines: [String] {
-        [
-            "\(Formatters.bytes(usedBytes)) / \(Formatters.bytes(totalBytes))"
-        ]
-    }
-}
-
-enum PressureLevel: Int, Sendable {
-    case normal = 1
-    case warn = 2
-    case critical = 4
-
-    var title: String {
-        switch self {
-        case .normal:
-            return "Normal"
-        case .warn:
-            return "Warning"
-        case .critical:
-            return "Critical"
-        }
-    }
-
-    var themeColor: Color {
-        switch self {
-        case .normal:
-            return .green
-        case .warn:
-            return .yellow
-        case .critical:
-            return .red
-        }
-    }
-}
-
-final class SystemSampler {
+public final class LiveSystemSnapshotReader {
     private var previousCPUCounters: CPUCounters?
     private var cpuHistory = HistoryBuffer()
     private var pressureHistory = HistoryBuffer()
 
-    func read() -> SystemSnapshot {
-        let cpu = readCPU()
-        let memory = readMemory()
-        let storage = readStorage()
+    public init() {}
 
-        return SystemSnapshot(cpu: cpu, memory: memory, storage: storage)
+    public func read() -> SystemSnapshot {
+        SystemSnapshot(
+            cpu: readCPU(),
+            memory: readMemory(),
+            storage: readStorage()
+        )
     }
 
     private func readCPU() -> CPUSnapshot {
@@ -245,33 +110,9 @@ final class SystemSampler {
 
         return min(max(scarcity * 0.55 + compressionPenalty + swapPenalty, 0), 100)
     }
-
 }
 
-struct CPUCounters: Sendable {
-    let user: UInt64
-    let system: UInt64
-    let idle: UInt64
-    let nice: UInt64
-}
-
-struct MemoryStats: Sendable {
-    let totalBytes: UInt64
-    let usedBytes: UInt64
-    let appMemoryBytes: UInt64
-    let wiredMemoryBytes: UInt64
-    let compressedBytes: UInt64
-    let cachedFilesBytes: UInt64
-    let freeBytes: UInt64
-    let swapUsedBytes: UInt64
-}
-
-struct StorageStats: Sendable {
-    let usedBytes: UInt64
-    let totalBytes: UInt64
-}
-
-enum SystemReaders {
+private enum SystemReaders {
     static func readCPUCounters() -> CPUCounters? {
         var info = host_cpu_load_info()
         var count = mach_msg_type_number_t(MemoryLayout<host_cpu_load_info_data_t>.stride / MemoryLayout<integer_t>.stride)
@@ -366,16 +207,5 @@ enum SystemReaders {
 
         guard result == 0 else { return nil }
         return swap.xsu_used
-    }
-}
-
-enum Formatters {
-    static func bytes(_ value: UInt64) -> String {
-        let formatter = ByteCountFormatter()
-        formatter.allowedUnits = [.useGB, .useMB]
-        formatter.countStyle = .binary
-        formatter.includesUnit = true
-        formatter.isAdaptive = true
-        return formatter.string(fromByteCount: Int64(value))
     }
 }

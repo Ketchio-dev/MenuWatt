@@ -1,6 +1,6 @@
 import AppKit
 
-enum SpriteFrame: String {
+enum SpriteFrame: String, CaseIterable {
     case run1
     case run2
     case run3
@@ -168,8 +168,15 @@ enum SpriteFrame: String {
     }
 }
 
+@MainActor
 enum SpriteRenderer {
+    private static var cache: [SpriteFrame: NSImage] = [:]
+
     static func image(for frame: SpriteFrame) -> NSImage {
+        if let cached = cache[frame] {
+            return cached
+        }
+
         let pixels = frame.pixels
         let imageSize = NSSize(width: 18, height: 18)
         let cellSize: CGFloat = 1
@@ -202,6 +209,7 @@ enum SpriteRenderer {
 
         image.unlockFocus()
         image.isTemplate = true
+        cache[frame] = image
         return image
     }
 }
