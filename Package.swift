@@ -14,18 +14,15 @@ let package = Package(
     ],
     targets: [
         .target(
-            name: "MenuWattCore",
-            path: "Sources/BoochiCore"
+            name: "MenuWattCore"
         ),
         .target(
             name: "MenuWattSystem",
-            dependencies: ["MenuWattCore"],
-            path: "Sources/BoochiSystem"
+            dependencies: ["MenuWattCore"]
         ),
         .executableTarget(
             name: "MenuWatt",
-            dependencies: ["MenuWattCore", "MenuWattSystem"],
-            path: "Sources/Boochi"
+            dependencies: ["MenuWattCore", "MenuWattSystem"]
         ),
         .testTarget(
             name: "MenuWattTests",
@@ -33,8 +30,7 @@ let package = Package(
                 "MenuWatt",
                 "MenuWattCore",
                 .product(name: "Testing", package: "swift-testing")
-            ],
-            path: "Tests/BoochiTests"
+            ]
         )
     ]
 )

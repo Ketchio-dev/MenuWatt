@@ -54,14 +54,6 @@ public struct CPUSnapshot: Sendable {
     public var titleValue: String {
         String(format: "%.1f%%", totalUsage)
     }
-
-    public var detailLines: [String] {
-        [
-            String(format: "System: %.1f%%", systemUsage),
-            String(format: "User: %.1f%%", userUsage),
-            String(format: "Idle: %.1f%%", idleUsage)
-        ]
-    }
 }
 
 public struct MemorySnapshot: Sendable {
@@ -116,18 +108,6 @@ public struct MemorySnapshot: Sendable {
     public var titleValue: String {
         String(format: "%.1f%%", usedPercent)
     }
-
-    public var detailLines: [String] {
-        [
-            "Pressure: \(pressureLevel.title)",
-            "Memory used: \(Formatters.bytes(usedBytes))",
-            "App memory: \(Formatters.bytes(appMemoryBytes))",
-            "Wired memory: \(Formatters.bytes(wiredMemoryBytes))",
-            "Compressed: \(Formatters.bytes(compressedBytes))",
-            "Cached files: \(Formatters.bytes(cachedFilesBytes))",
-            "Swap used: \(Formatters.bytes(swapUsedBytes))"
-        ]
-    }
 }
 
 public struct StorageSnapshot: Sendable {
@@ -145,12 +125,6 @@ public struct StorageSnapshot: Sendable {
 
     public var titleValue: String {
         String(format: "%.1f%% used", usedPercent)
-    }
-
-    public var detailLines: [String] {
-        [
-            "\(Formatters.bytes(usedBytes)) / \(Formatters.bytes(totalBytes))"
-        ]
     }
 }
 
