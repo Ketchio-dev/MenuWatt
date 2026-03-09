@@ -4,32 +4,55 @@ import IOKit.ps
 import MenuWattCore
 
 public struct LiveBatterySnapshotReader {
-    public init() {}
+    struct PowerSourceSnapshot: Sendable {
+        let currentCapacity: Int
+        let maxCapacity: Int
+        let isCharging: Bool
+        let isCharged: Bool
+        let sourceState: String
+        let name: String
+        let timeToFullCharge: Int?
+        let timeToEmpty: Int?
+    }
+
+    struct Dependencies: Sendable {
+        let readPowerSourceSnapshot: @Sendable () -> PowerSourceSnapshot?
+        let readMetrics: @Sendable () -> SmartBatteryMetrics?
+        let now: @Sendable () -> Date
+
+        static let live = Dependencies(
+            readPowerSourceSnapshot: LiveBatteryPowerSourceReader.read,
+            readMetrics: SmartBatteryMetricsReader().read,
+            now: Date.init
+        )
+    }
+
+    private let dependencies: Dependencies
+
+    public init() {
+        self.dependencies = .live
+    }
+
+    init(dependencies: Dependencies) {
+        self.dependencies = dependencies
+    }
 
     public func read() -> BatterySnapshot {
-        let info = IOPSCopyPowerSourcesInfo().takeRetainedValue()
-        let sources = IOPSCopyPowerSourcesList(info).takeRetainedValue() as [AnyObject]
-        let metrics = SmartBatteryMetricsReader().read()
+        let metrics = dependencies.readMetrics()
 
-        guard let firstSource = sources.first,
-              let description = IOPSGetPowerSourceDescription(info, firstSource)?.takeUnretainedValue() as? [String: Any] else {
+        guard let source = dependencies.readPowerSourceSnapshot() else {
             return .unavailable
         }
 
-        let currentCapacity = description[kIOPSCurrentCapacityKey as String] as? Int ?? 0
-        let maxCapacity = max(description[kIOPSMaxCapacityKey as String] as? Int ?? 100, 1)
-        let percentage = Int((Double(currentCapacity) / Double(maxCapacity) * 100.0).rounded())
-        let isCharging = description[kIOPSIsChargingKey as String] as? Bool ?? false
-        let isCharged = description[kIOPSIsChargedKey as String] as? Bool ?? false
-        let sourceState = description[kIOPSPowerSourceStateKey as String] as? String ?? kIOPSBatteryPowerValue
-        let name = description[kIOPSNameKey as String] as? String ?? "Battery"
+        let maxCapacity = max(source.maxCapacity, 1)
+        let percentage = Int((Double(source.currentCapacity) / Double(maxCapacity) * 100.0).rounded())
 
         let state: BatteryState
-        if isCharged {
+        if source.isCharged {
             state = .full
-        } else if isCharging {
+        } else if source.isCharging {
             state = .charging
-        } else if sourceState == kIOPSACPowerValue {
+        } else if source.sourceState == kIOPSACPowerValue {
             state = .pluggedIn
         } else {
             state = .onBattery
@@ -39,12 +62,12 @@ public struct LiveBatterySnapshotReader {
         switch state {
         case .charging:
             timeEstimate = makeTimeEstimate(
-                minutes: description[kIOPSTimeToFullChargeKey as String] as? Int,
+                minutes: source.timeToFullCharge,
                 context: .untilFull
             )
         case .onBattery:
             timeEstimate = makeTimeEstimate(
-                minutes: description[kIOPSTimeToEmptyKey as String] as? Int,
+                minutes: source.timeToEmpty,
                 context: .remaining
             )
         case .pluggedIn, .full, .unavailable:
@@ -52,10 +75,10 @@ public struct LiveBatterySnapshotReader {
         }
 
         return BatterySnapshot(
-            name: name,
+            name: source.name,
             percentage: percentage,
             state: state,
-            sourceDescription: sourceState == kIOPSACPowerValue ? "Power Adapter" : "Battery",
+            sourceDescription: source.sourceState == kIOPSACPowerValue ? "Power Adapter" : "Battery",
             timeEstimate: timeEstimate,
             rateDetail: makeRateDetail(state: state, metrics: metrics),
             liveInputDetail: makeLiveInputDetail(state: state, metrics: metrics),
@@ -65,7 +88,7 @@ public struct LiveBatterySnapshotReader {
             systemLoadWatts: metrics?.systemLoadWatts,
             cycleCount: metrics?.cycleCount,
             temperatureCelsius: metrics?.temperatureCelsius,
-            updatedAt: .now
+            updatedAt: dependencies.now()
         )
     }
 
@@ -121,7 +144,7 @@ public struct LiveBatterySnapshotReader {
     }
 }
 
-private struct SmartBatteryMetrics: Sendable {
+struct SmartBatteryMetrics: Sendable {
     let batteryWatts: Double?
     let adapterWatts: Double?
     let systemInputWatts: Double?
@@ -130,7 +153,30 @@ private struct SmartBatteryMetrics: Sendable {
     let temperatureCelsius: Double?
 }
 
-private struct SmartBatteryMetricsReader {
+private enum LiveBatteryPowerSourceReader {
+    static func read() -> LiveBatterySnapshotReader.PowerSourceSnapshot? {
+        let info = IOPSCopyPowerSourcesInfo().takeRetainedValue()
+        let sources = IOPSCopyPowerSourcesList(info).takeRetainedValue() as [AnyObject]
+
+        guard let firstSource = sources.first,
+              let description = IOPSGetPowerSourceDescription(info, firstSource)?.takeUnretainedValue() as? [String: Any] else {
+            return nil
+        }
+
+        return LiveBatterySnapshotReader.PowerSourceSnapshot(
+            currentCapacity: description[kIOPSCurrentCapacityKey as String] as? Int ?? 0,
+            maxCapacity: description[kIOPSMaxCapacityKey as String] as? Int ?? 100,
+            isCharging: description[kIOPSIsChargingKey as String] as? Bool ?? false,
+            isCharged: description[kIOPSIsChargedKey as String] as? Bool ?? false,
+            sourceState: description[kIOPSPowerSourceStateKey as String] as? String ?? kIOPSBatteryPowerValue,
+            name: description[kIOPSNameKey as String] as? String ?? "Battery",
+            timeToFullCharge: description[kIOPSTimeToFullChargeKey as String] as? Int,
+            timeToEmpty: description[kIOPSTimeToEmptyKey as String] as? Int
+        )
+    }
+}
+
+struct SmartBatteryMetricsReader {
     func read() -> SmartBatteryMetrics? {
         guard let entry = matchingService(named: "AppleSmartBattery") else {
             return nil

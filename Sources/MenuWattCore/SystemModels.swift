@@ -35,13 +35,22 @@ public struct SystemSnapshot: Sendable {
 }
 
 public struct CPUSnapshot: Sendable {
+    public let isAvailable: Bool
     public let totalUsage: Double
     public let userUsage: Double
     public let systemUsage: Double
     public let idleUsage: Double
     public let history: [Double]
 
-    public init(totalUsage: Double, userUsage: Double, systemUsage: Double, idleUsage: Double, history: [Double]) {
+    public init(
+        totalUsage: Double,
+        userUsage: Double,
+        systemUsage: Double,
+        idleUsage: Double,
+        history: [Double],
+        isAvailable: Bool = true
+    ) {
+        self.isAvailable = isAvailable
         self.totalUsage = totalUsage
         self.userUsage = userUsage
         self.systemUsage = systemUsage
@@ -49,14 +58,23 @@ public struct CPUSnapshot: Sendable {
         self.history = history
     }
 
-    public static let unavailable = CPUSnapshot(totalUsage: 0, userUsage: 0, systemUsage: 0, idleUsage: 100, history: [])
+    public static let unavailable = CPUSnapshot(
+        totalUsage: 0,
+        userUsage: 0,
+        systemUsage: 0,
+        idleUsage: 100,
+        history: [],
+        isAvailable: false
+    )
 
     public var titleValue: String {
-        String(format: "%.1f%%", totalUsage)
+        guard isAvailable else { return "Unavailable" }
+        return String(format: "%.1f%%", totalUsage)
     }
 }
 
 public struct MemorySnapshot: Sendable {
+    public let isAvailable: Bool
     public let usedPercent: Double
     public let pressurePercent: Double
     public let pressureLevel: PressureLevel
@@ -78,8 +96,10 @@ public struct MemorySnapshot: Sendable {
         compressedBytes: UInt64,
         cachedFilesBytes: UInt64,
         swapUsedBytes: UInt64,
-        pressureHistory: [Double]
+        pressureHistory: [Double],
+        isAvailable: Bool = true
     ) {
+        self.isAvailable = isAvailable
         self.usedPercent = usedPercent
         self.pressurePercent = pressurePercent
         self.pressureLevel = pressureLevel
@@ -102,29 +122,34 @@ public struct MemorySnapshot: Sendable {
         compressedBytes: 0,
         cachedFilesBytes: 0,
         swapUsedBytes: 0,
-        pressureHistory: []
+        pressureHistory: [],
+        isAvailable: false
     )
 
     public var titleValue: String {
-        String(format: "%.1f%%", usedPercent)
+        guard isAvailable else { return "Unavailable" }
+        return String(format: "%.1f%%", usedPercent)
     }
 }
 
 public struct StorageSnapshot: Sendable {
+    public let isAvailable: Bool
     public let usedPercent: Double
     public let usedBytes: UInt64
     public let totalBytes: UInt64
 
-    public init(usedPercent: Double, usedBytes: UInt64, totalBytes: UInt64) {
+    public init(usedPercent: Double, usedBytes: UInt64, totalBytes: UInt64, isAvailable: Bool = true) {
+        self.isAvailable = isAvailable
         self.usedPercent = usedPercent
         self.usedBytes = usedBytes
         self.totalBytes = totalBytes
     }
 
-    public static let unavailable = StorageSnapshot(usedPercent: 0, usedBytes: 0, totalBytes: 0)
+    public static let unavailable = StorageSnapshot(usedPercent: 0, usedBytes: 0, totalBytes: 0, isAvailable: false)
 
     public var titleValue: String {
-        String(format: "%.1f%% used", usedPercent)
+        guard isAvailable else { return "Unavailable" }
+        return String(format: "%.1f%% used", usedPercent)
     }
 }
 
@@ -200,13 +225,28 @@ public struct StorageStats: Sendable {
     }
 }
 
-public enum Formatters {
-    public static func bytes(_ value: UInt64) -> String {
+private final class ByteCountFormatterCache: @unchecked Sendable {
+    private let lock = NSLock()
+    private let formatter: ByteCountFormatter = {
         let formatter = ByteCountFormatter()
         formatter.allowedUnits = [.useGB, .useMB]
         formatter.countStyle = .binary
         formatter.includesUnit = true
         formatter.isAdaptive = true
+        return formatter
+    }()
+
+    func string(from value: UInt64) -> String {
+        lock.lock()
+        defer { lock.unlock() }
         return formatter.string(fromByteCount: Int64(value))
+    }
+}
+
+public enum Formatters {
+    private static let byteCountFormatterCache = ByteCountFormatterCache()
+
+    public static func bytes(_ value: UInt64) -> String {
+        byteCountFormatterCache.string(from: value)
     }
 }

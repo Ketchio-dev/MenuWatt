@@ -30,6 +30,7 @@ final class PowerMonitor: ObservableObject {
 
     private let sampler: any MonitorSampling
     private let configuration: Configuration
+    private let logger = MenuWattDiagnostics.monitoring
 
     init(
         sampler: any MonitorSampling = LiveMonitorSampler(),
@@ -44,6 +45,7 @@ final class PowerMonitor: ObservableObject {
 
     func start() {
         isRunning = true
+        logger.info("Power monitor started")
 
         if refreshLoopTask == nil {
             requestRefresh(resetAnimation: true)
@@ -62,6 +64,7 @@ final class PowerMonitor: ObservableObject {
     func stop() {
         isRunning = false
         refreshSequence &+= 1
+        logger.info("Power monitor stopped")
 
         refreshLoopTask?.cancel()
         refreshLoopTask = nil
@@ -122,10 +125,13 @@ final class PowerMonitor: ObservableObject {
 
     private func apply(_ payload: SamplePayload, resetAnimation: Bool) {
         let previousState = snapshot.state
+        let previousBattery = snapshot
+        let previousSystem = systemSnapshot
         let nextSnapshot = payload.battery
 
         snapshot = nextSnapshot
         systemSnapshot = payload.system
+        logTransitions(fromBattery: previousBattery, toBattery: nextSnapshot, fromSystem: previousSystem, toSystem: payload.system)
 
         if resetAnimation || previousState != nextSnapshot.state {
             frameIndex = 0
@@ -155,5 +161,30 @@ final class PowerMonitor: ObservableObject {
 
     private func nanoseconds(for interval: TimeInterval) -> UInt64 {
         UInt64(max(interval, 0.001) * 1_000_000_000)
+    }
+
+    private func logTransitions(
+        fromBattery previousBattery: BatterySnapshot,
+        toBattery nextBattery: BatterySnapshot,
+        fromSystem previousSystem: SystemSnapshot,
+        toSystem nextSystem: SystemSnapshot
+    ) {
+        if previousBattery.state != nextBattery.state {
+            logger.info("Battery state changed to \(String(describing: nextBattery.state), privacy: .public)")
+        }
+
+        logAvailabilityChange(component: "battery", wasAvailable: previousBattery.state != .unavailable, isAvailable: nextBattery.state != .unavailable)
+        logAvailabilityChange(component: "cpu", wasAvailable: previousSystem.cpu.isAvailable, isAvailable: nextSystem.cpu.isAvailable)
+        logAvailabilityChange(component: "memory", wasAvailable: previousSystem.memory.isAvailable, isAvailable: nextSystem.memory.isAvailable)
+        logAvailabilityChange(component: "storage", wasAvailable: previousSystem.storage.isAvailable, isAvailable: nextSystem.storage.isAvailable)
+    }
+
+    private func logAvailabilityChange(component: StaticString, wasAvailable: Bool, isAvailable: Bool) {
+        guard wasAvailable != isAvailable else { return }
+        if isAvailable {
+            logger.info("\(component, privacy: .public) metrics recovered")
+        } else {
+            logger.error("\(component, privacy: .public) metrics became unavailable")
+        }
     }
 }

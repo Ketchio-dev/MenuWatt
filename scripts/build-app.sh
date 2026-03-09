@@ -4,19 +4,27 @@ set -euo pipefail
 
 ROOT_DIR="$(cd "$(dirname "$0")/.." && pwd)"
 APP_NAME="MenuWatt"
-BUILD_DIR="/tmp/MenuWattBuild"
+ARTIFACT_DIR="$ROOT_DIR/.build-app"
+SCRATCH_DIR="$(mktemp -d "${TMPDIR:-/tmp}/MenuWattBuild.XXXXXX")"
+
+cleanup() {
+  rm -rf "$SCRATCH_DIR"
+}
+
+trap cleanup EXIT
 
 cd "$ROOT_DIR"
 
-swift build -c release --scratch-path "$BUILD_DIR"
+swift build -c release --scratch-path "$SCRATCH_DIR"
 
-BIN_PATH="$(find "$BUILD_DIR" -type f -path "*/release/$APP_NAME" | head -n 1)"
+BIN_PATH="$(find "$SCRATCH_DIR" -type f -path "*/release/$APP_NAME" | head -n 1)"
 if [[ -z "$BIN_PATH" ]]; then
   echo "Could not locate release binary for $APP_NAME" >&2
   exit 1
 fi
 
-APP_DIR="$ROOT_DIR/.build/${APP_NAME}.app"
+mkdir -p "$ARTIFACT_DIR"
+APP_DIR="$ARTIFACT_DIR/${APP_NAME}.app"
 
 rm -rf "$APP_DIR"
 mkdir -p "$APP_DIR/Contents/MacOS" "$APP_DIR/Contents/Resources"

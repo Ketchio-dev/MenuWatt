@@ -3,11 +3,34 @@ import Foundation
 import MenuWattCore
 
 public final class LiveSystemSnapshotReader {
+    struct Readers: Sendable {
+        let readCPUCounters: @Sendable () -> CPUCounters?
+        let readMemoryStats: @Sendable () -> MemoryStats?
+        let readStorageStats: @Sendable () -> StorageStats?
+        let readKernelPressureLevel: @Sendable () -> PressureLevel
+
+        static let live = Readers(
+            readCPUCounters: SystemReaders.readCPUCounters,
+            readMemoryStats: SystemReaders.readMemoryStats,
+            readStorageStats: SystemReaders.readStorageStats,
+            readKernelPressureLevel: SystemReaders.readKernelPressureLevel
+        )
+    }
+
     private var previousCPUCounters: CPUCounters?
     private var cpuHistory = HistoryBuffer()
     private var pressureHistory = HistoryBuffer()
+    private let readers: Readers
 
-    public init() {}
+    public init() {
+        self.readers = .live
+        self.previousCPUCounters = readers.readCPUCounters()
+    }
+
+    init(readers: Readers) {
+        self.readers = readers
+        self.previousCPUCounters = readers.readCPUCounters()
+    }
 
     public func read() -> SystemSnapshot {
         SystemSnapshot(
@@ -18,7 +41,7 @@ public final class LiveSystemSnapshotReader {
     }
 
     private func readCPU() -> CPUSnapshot {
-        guard let counters = SystemReaders.readCPUCounters() else {
+        guard let counters = readers.readCPUCounters() else {
             return .unavailable
         }
         defer { previousCPUCounters = counters }
@@ -34,7 +57,14 @@ public final class LiveSystemSnapshotReader {
         let totalDelta = userDelta + systemDelta + idleDelta + niceDelta
 
         guard totalDelta > 0 else {
-            return .unavailable
+            cpuHistory.append(0)
+            return CPUSnapshot(
+                totalUsage: 0,
+                userUsage: 0,
+                systemUsage: 0,
+                idleUsage: 100,
+                history: cpuHistory.samples
+            )
         }
 
         let userUsage = Double(userDelta + niceDelta) / Double(totalDelta) * 100
@@ -53,7 +83,7 @@ public final class LiveSystemSnapshotReader {
     }
 
     private func readMemory() -> MemorySnapshot {
-        guard let stats = SystemReaders.readMemoryStats() else {
+        guard let stats = readers.readMemoryStats() else {
             return .unavailable
         }
 
@@ -64,7 +94,7 @@ public final class LiveSystemSnapshotReader {
 
         let usedPercent = Double(stats.usedBytes) / total * 100
         let pressurePercent = memoryPressurePercent(for: stats)
-        let pressureLevel = SystemReaders.readKernelPressureLevel()
+        let pressureLevel = readers.readKernelPressureLevel()
 
         pressureHistory.append(pressurePercent)
 
@@ -83,7 +113,7 @@ public final class LiveSystemSnapshotReader {
     }
 
     private func readStorage() -> StorageSnapshot {
-        guard let stats = SystemReaders.readStorageStats() else {
+        guard let stats = readers.readStorageStats() else {
             return .unavailable
         }
 

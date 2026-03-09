@@ -104,28 +104,38 @@ struct CPUSection: View {
     let snapshot: CPUSnapshot
 
     var body: some View {
+        let presentation = CPUSectionPresentation.make(from: snapshot)
+
         VStack(alignment: .leading, spacing: 5) {
             HStack {
                 Label("CPU", systemImage: "cpu")
                     .font(.system(size: 11, weight: .semibold))
                     .foregroundStyle(.secondary)
                 Spacer()
-                Text(snapshot.titleValue)
+                Text(presentation.titleValue)
                     .font(.system(size: 12, weight: .semibold, design: .monospaced))
                     .monospacedDigit()
             }
 
-            NativeProgressBar(value: snapshot.totalUsage / 100, tint: cpuTint(snapshot.totalUsage))
-
-            HStack(spacing: 0) {
-                InlineMetric(label: "Sys", value: String(format: "%.1f%%", snapshot.systemUsage))
-                InlineMetric(label: "User", value: String(format: "%.1f%%", snapshot.userUsage))
-                InlineMetric(label: "Idle", value: String(format: "%.1f%%", snapshot.idleUsage))
+            if presentation.showsProgress {
+                NativeProgressBar(value: snapshot.totalUsage / 100, tint: cpuTint(snapshot.totalUsage))
             }
 
-            if !snapshot.history.isEmpty {
+            if presentation.showsMetrics {
+                HStack(spacing: 0) {
+                    InlineMetric(label: "Sys", value: String(format: "%.1f%%", snapshot.systemUsage))
+                    InlineMetric(label: "User", value: String(format: "%.1f%%", snapshot.userUsage))
+                    InlineMetric(label: "Idle", value: String(format: "%.1f%%", snapshot.idleUsage))
+                }
+            }
+
+            if presentation.showsHistory {
                 MiniGraphView(primarySamples: snapshot.history, secondarySamples: [])
                     .frame(height: 32)
+            }
+
+            if let unavailableMessage = presentation.unavailableMessage {
+                UnavailableCaption(unavailableMessage)
             }
         }
         .padding(.horizontal, 12)
@@ -143,32 +153,44 @@ struct MemorySection: View {
     let snapshot: MemorySnapshot
 
     var body: some View {
+        let presentation = MemorySectionPresentation.make(from: snapshot)
+
         VStack(alignment: .leading, spacing: 5) {
             HStack {
                 Label("Memory", systemImage: "memorychip")
                     .font(.system(size: 11, weight: .semibold))
                     .foregroundStyle(.secondary)
                 Spacer()
-                PressureBadge(level: snapshot.pressureLevel)
-                Text(snapshot.titleValue)
+                if presentation.showsPressureBadge {
+                    PressureBadge(level: snapshot.pressureLevel)
+                }
+                Text(presentation.titleValue)
                     .font(.system(size: 12, weight: .semibold, design: .monospaced))
                     .monospacedDigit()
             }
 
-            NativeProgressBar(
-                value: snapshot.usedPercent / 100,
-                tint: PressureLevelPresentation.themeColor(for: snapshot.pressureLevel)
-            )
-
-            HStack(spacing: 0) {
-                InlineMetric(label: "Used", value: Formatters.bytes(snapshot.usedBytes))
-                InlineMetric(label: "App", value: Formatters.bytes(snapshot.appMemoryBytes))
-                InlineMetric(label: "Wired", value: Formatters.bytes(snapshot.wiredMemoryBytes))
+            if presentation.showsProgress {
+                NativeProgressBar(
+                    value: snapshot.usedPercent / 100,
+                    tint: PressureLevelPresentation.themeColor(for: snapshot.pressureLevel)
+                )
             }
-            HStack(spacing: 0) {
-                InlineMetric(label: "Compr", value: Formatters.bytes(snapshot.compressedBytes))
-                InlineMetric(label: "Cache", value: Formatters.bytes(snapshot.cachedFilesBytes))
-                InlineMetric(label: "Swap", value: Formatters.bytes(snapshot.swapUsedBytes))
+
+            if presentation.showsMetrics {
+                HStack(spacing: 0) {
+                    InlineMetric(label: "Used", value: Formatters.bytes(snapshot.usedBytes))
+                    InlineMetric(label: "App", value: Formatters.bytes(snapshot.appMemoryBytes))
+                    InlineMetric(label: "Wired", value: Formatters.bytes(snapshot.wiredMemoryBytes))
+                }
+                HStack(spacing: 0) {
+                    InlineMetric(label: "Compr", value: Formatters.bytes(snapshot.compressedBytes))
+                    InlineMetric(label: "Cache", value: Formatters.bytes(snapshot.cachedFilesBytes))
+                    InlineMetric(label: "Swap", value: Formatters.bytes(snapshot.swapUsedBytes))
+                }
+            }
+
+            if let unavailableMessage = presentation.unavailableMessage {
+                UnavailableCaption(unavailableMessage)
             }
         }
         .padding(.horizontal, 12)
@@ -180,22 +202,32 @@ struct StorageSection: View {
     let snapshot: StorageSnapshot
 
     var body: some View {
+        let presentation = StorageSectionPresentation.make(from: snapshot)
+
         VStack(alignment: .leading, spacing: 5) {
             HStack {
                 Label("Storage", systemImage: "internaldrive")
                     .font(.system(size: 11, weight: .semibold))
                     .foregroundStyle(.secondary)
                 Spacer()
-                Text("\(Formatters.bytes(snapshot.usedBytes)) / \(Formatters.bytes(snapshot.totalBytes))")
-                    .font(.system(size: 11, design: .monospaced))
-                    .foregroundStyle(.secondary)
-                    .monospacedDigit()
-                Text(snapshot.titleValue)
+                if let usageSummary = presentation.usageSummary {
+                    Text(usageSummary)
+                        .font(.system(size: 11, design: .monospaced))
+                        .foregroundStyle(.secondary)
+                        .monospacedDigit()
+                }
+                Text(presentation.titleValue)
                     .font(.system(size: 12, weight: .semibold, design: .monospaced))
                     .monospacedDigit()
             }
 
-            NativeProgressBar(value: snapshot.usedPercent / 100, tint: storageTint(snapshot.usedPercent))
+            if presentation.showsProgress {
+                NativeProgressBar(value: snapshot.usedPercent / 100, tint: storageTint(snapshot.usedPercent))
+            }
+
+            if let unavailableMessage = presentation.unavailableMessage {
+                UnavailableCaption(unavailableMessage)
+            }
         }
         .padding(.horizontal, 12)
         .padding(.vertical, 6)
@@ -205,6 +237,21 @@ struct StorageSection: View {
         if percent > 90 { return .red }
         if percent > 75 { return .orange }
         return .cyan
+    }
+}
+
+struct UnavailableCaption: View {
+    let text: String
+
+    init(_ text: String) {
+        self.text = text
+    }
+
+    var body: some View {
+        Text(text)
+            .font(.system(size: 10))
+            .foregroundStyle(.tertiary)
+            .fixedSize(horizontal: false, vertical: true)
     }
 }
 

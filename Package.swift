@@ -29,6 +29,7 @@ let package = Package(
             dependencies: [
                 "MenuWatt",
                 "MenuWattCore",
+                "MenuWattSystem",
                 .product(name: "Testing", package: "swift-testing")
             ]
         )
