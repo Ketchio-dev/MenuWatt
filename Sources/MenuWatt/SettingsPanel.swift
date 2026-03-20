@@ -329,21 +329,6 @@ private struct SettingsCard<Content: View>: View {
     }
 }
 
-private struct SettingsStatusRow: View {
-    let title: String
-    let value: String
-
-    var body: some View {
-        HStack {
-            Text(title)
-            Spacer()
-            Text(value)
-                .foregroundStyle(.secondary)
-                .monospacedDigit()
-        }
-    }
-}
-
 private struct AboutSettingsPane: View {
     var body: some View {
         VStack(alignment: .leading, spacing: 18) {

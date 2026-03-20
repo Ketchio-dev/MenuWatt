@@ -9,6 +9,9 @@ let package = Package(
     products: [
         .executable(name: "MenuWatt", targets: ["MenuWatt"])
     ],
+    dependencies: [
+        .package(url: "https://github.com/swiftlang/swift-testing.git", exact: "6.2.4")
+    ],
     targets: [
         .target(
             name: "MenuWattCore"
@@ -20,6 +23,16 @@ let package = Package(
         .executableTarget(
             name: "MenuWatt",
             dependencies: ["MenuWattCore", "MenuWattSystem"]
+        ),
+        .testTarget(
+            name: "MenuWattTests",
+            dependencies: [
+                "MenuWatt",
+                "MenuWattCore",
+                "MenuWattSystem",
+                .product(name: "Testing", package: "swift-testing")
+            ],
+            path: "Tests/MenuWattTests"
         ),
     ]
 )

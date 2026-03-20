@@ -11,16 +11,52 @@ extension LaunchAtLoginControlling {
     func refreshConfigurationIfNeeded() throws {}
 }
 
-/// Uses ~/Library/LaunchAgents/ plist to register login item.
-/// Works without code signing.
+/// Uses a per-user LaunchAgent plist for direct-distributed builds.
+/// This keeps launch-at-login working without requiring an embedded helper app.
 struct LaunchAgentController: LaunchAtLoginControlling {
-    private let label = "com.menuwatt.launcher"
-    private let bundleIdentifier = "com.junsu.menuwatt"
-    private let openCommand = "/usr/bin/open"
+    struct Environment: Sendable {
+        let plistURL: URL
+        let currentExecutablePath: @Sendable () -> String
+        let currentBundlePath: @Sendable () -> String
+        let installedAppBundleURL: @Sendable () -> URL?
+
+        static let live = Environment(
+            plistURL: FileManager.default.homeDirectoryForCurrentUser
+                .appendingPathComponent("Library/LaunchAgents/\(Constants.label).plist"),
+            currentExecutablePath: {
+                Bundle.main.executablePath ?? ProcessInfo.processInfo.arguments.first ?? ""
+            },
+            currentBundlePath: {
+                Bundle.main.bundlePath
+            },
+            installedAppBundleURL: {
+                let appURL = URL(fileURLWithPath: "/Applications/MenuWatt.app")
+                guard
+                    let bundle = Bundle(url: appURL),
+                    bundle.bundleIdentifier == Constants.bundleIdentifier
+                else {
+                    return nil
+                }
+
+                return appURL
+            }
+        )
+    }
+
+    private enum Constants {
+        static let label = "com.menuwatt.launcher"
+        static let bundleIdentifier = "com.junsu.menuwatt"
+        static let openCommand = "/usr/bin/open"
+    }
+
+    private let environment: Environment
+
+    init(environment: Environment = .live) {
+        self.environment = environment
+    }
 
     private var plistURL: URL {
-        FileManager.default.homeDirectoryForCurrentUser
-            .appendingPathComponent("Library/LaunchAgents/\(label).plist")
+        environment.plistURL
     }
 
     private var currentRegisteredProgramArguments: [String]? {
@@ -36,17 +72,8 @@ struct LaunchAgentController: LaunchAtLoginControlling {
         return arguments
     }
 
-    private var installedAppExecutablePath: String? {
-        let appURL = URL(fileURLWithPath: "/Applications/MenuWatt.app")
-        guard
-            let bundle = Bundle(url: appURL),
-            bundle.bundleIdentifier == bundleIdentifier,
-            let executablePath = bundle.executablePath
-        else {
-            return nil
-        }
-
-        return executablePath
+    private var installedAppBundlePath: String? {
+        environment.installedAppBundleURL()?.path
     }
 
     private func shouldPreferInstalledApp(for path: String) -> Bool {
@@ -54,21 +81,17 @@ struct LaunchAgentController: LaunchAtLoginControlling {
     }
 
     private var appBundlePath: String {
-        let currentExecutablePath = Bundle.main.executablePath ?? ProcessInfo.processInfo.arguments.first ?? ""
+        let currentExecutablePath = environment.currentExecutablePath()
 
-        if shouldPreferInstalledApp(for: currentExecutablePath), let installedAppExecutablePath {
-            return URL(fileURLWithPath: installedAppExecutablePath)
-                .deletingLastPathComponent()
-                .deletingLastPathComponent()
-                .deletingLastPathComponent()
-                .path
+        if shouldPreferInstalledApp(for: currentExecutablePath), let installedAppBundlePath {
+            return installedAppBundlePath
         }
 
-        return Bundle.main.bundlePath
+        return environment.currentBundlePath()
     }
 
     private var programArguments: [String] {
-        [openCommand, "-a", appBundlePath]
+        [Constants.openCommand, "-a", appBundlePath]
     }
 
     var isEnabled: Bool {
@@ -89,7 +112,7 @@ struct LaunchAgentController: LaunchAtLoginControlling {
     func setEnabled(_ enabled: Bool) throws {
         if enabled {
             let plist: [String: Any] = [
-                "Label": label,
+                "Label": Constants.label,
                 "ProgramArguments": programArguments,
                 "RunAtLoad": true,
                 "KeepAlive": false,
@@ -119,12 +142,26 @@ final class AppPreferences: ObservableObject {
     private let logger = MenuWattDiagnostics.preferences
 
     init(
-        launchAtLoginController: any LaunchAtLoginControlling = LaunchAgentController(),
-        userDefaults: UserDefaults = .standard
+        launchAtLoginController: any LaunchAtLoginControlling = LaunchAgentController()
     ) {
         self.launchAtLoginController = launchAtLoginController
-        try? self.launchAtLoginController.refreshConfigurationIfNeeded()
+
+        var initialError: String?
+        do {
+            try self.launchAtLoginController.refreshConfigurationIfNeeded()
+        } catch {
+            initialError = Self.launchAtLoginErrorMessage(
+                action: "Failed to refresh Launch at Login",
+                error: error
+            )
+        }
+
         self.launchesAtLogin = launchAtLoginController.isEnabled
+        self.launchAtLoginError = initialError
+
+        if let initialError {
+            logger.error("\(initialError, privacy: .public)")
+        }
     }
 
     func setLaunchAtLogin(_ enabled: Bool) {
@@ -135,12 +172,19 @@ final class AppPreferences: ObservableObject {
             logger.info("Launch at Login set to \(self.launchesAtLogin, privacy: .public)")
         } catch {
             launchesAtLogin = launchAtLoginController.isEnabled
-            launchAtLoginError = "Failed to update Launch at Login: \(error.localizedDescription)"
-            logger.error("Failed to update Launch at Login: \(error.localizedDescription, privacy: .public)")
+            launchAtLoginError = Self.launchAtLoginErrorMessage(
+                action: "Failed to update Launch at Login",
+                error: error
+            )
+            logger.error("\(self.launchAtLoginError ?? "", privacy: .public)")
         }
     }
 
     func dismissLaunchAtLoginError() {
         launchAtLoginError = nil
+    }
+
+    private static func launchAtLoginErrorMessage(action: String, error: any Error) -> String {
+        "\(action): \(error.localizedDescription)"
     }
 }

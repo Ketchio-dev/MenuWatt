@@ -4,31 +4,36 @@ import Testing
 
 private final class LaunchAtLoginControllerMock: LaunchAtLoginControlling {
     var isEnabled: Bool
-    var error: (any Error)?
+    var setEnabledError: (any Error)?
+    var refreshError: (any Error)?
 
-    init(isEnabled: Bool, error: (any Error)? = nil) {
+    init(
+        isEnabled: Bool,
+        setEnabledError: (any Error)? = nil,
+        refreshError: (any Error)? = nil
+    ) {
         self.isEnabled = isEnabled
-        self.error = error
+        self.setEnabledError = setEnabledError
+        self.refreshError = refreshError
     }
 
     func setEnabled(_ enabled: Bool) throws {
-        if let error {
-            throw error
+        if let setEnabledError {
+            throw setEnabledError
         }
 
         isEnabled = enabled
+    }
+
+    func refreshConfigurationIfNeeded() throws {
+        if let refreshError {
+            throw refreshError
+        }
     }
 }
 
 private enum MockError: Error {
     case registrationFailed
-}
-
-private func makeTestDefaults(testName: String = #function) -> UserDefaults {
-    let suiteName = "MenuWattTests.AppPreferences.\(testName)"
-    let defaults = UserDefaults(suiteName: suiteName)!
-    defaults.removePersistentDomain(forName: suiteName)
-    return defaults
 }
 
 @Test
@@ -46,7 +51,7 @@ func launchAtLoginToggleUpdatesStateOnSuccess() {
 @Test
 @MainActor
 func launchAtLoginToggleShowsErrorOnFailure() {
-    let controller = LaunchAtLoginControllerMock(isEnabled: false, error: MockError.registrationFailed)
+    let controller = LaunchAtLoginControllerMock(isEnabled: false, setEnabledError: MockError.registrationFailed)
     let preferences = AppPreferences(launchAtLoginController: controller)
 
     preferences.setLaunchAtLogin(true)
@@ -58,11 +63,25 @@ func launchAtLoginToggleShowsErrorOnFailure() {
 @Test
 @MainActor
 func launchAtLoginErrorCanBeDismissed() {
-    let controller = LaunchAtLoginControllerMock(isEnabled: false, error: MockError.registrationFailed)
+    let controller = LaunchAtLoginControllerMock(isEnabled: false, setEnabledError: MockError.registrationFailed)
     let preferences = AppPreferences(launchAtLoginController: controller)
 
     preferences.setLaunchAtLogin(true)
     preferences.dismissLaunchAtLoginError()
 
     #expect(preferences.launchAtLoginError == nil)
+}
+
+@Test
+@MainActor
+func refreshFailureDuringInitializationSurfacesError() {
+    let controller = LaunchAtLoginControllerMock(
+        isEnabled: true,
+        refreshError: MockError.registrationFailed
+    )
+
+    let preferences = AppPreferences(launchAtLoginController: controller)
+
+    #expect(preferences.launchesAtLogin)
+    #expect(preferences.launchAtLoginError?.contains("Failed to refresh Launch at Login") == true)
 }

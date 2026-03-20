@@ -70,6 +70,8 @@ MenuWatt is split into three targets:
 
 MenuWatt reads battery data directly through Apple's **IOKit** framework with no runtime dependencies, background daemons, or network calls. System metrics (CPU, memory, storage) are gathered via `host_statistics` and filesystem APIs.
 
+For launch-at-login, MenuWatt installs a per-user LaunchAgent plist in `~/Library/LaunchAgents`, which keeps the feature working for direct-distributed builds without requiring an embedded helper app.
+
 ## Tech Stack
 
 | Component | Technology |
@@ -81,10 +83,20 @@ MenuWatt reads battery data directly through Apple's **IOKit** framework with no
 | Test Framework | swift-testing |
 | Min Deployment | macOS 13.0 (Ventura) |
 
+## Development
+
+- Run tests with `./scripts/test.sh`
+- Build a release app bundle with `./scripts/build-app.sh`
+- Package a DMG with `./scripts/package-dmg.sh`
+- `scripts/build-app.sh` expects a full Xcode installation plus `xcodegen`, because `project.yml` is the source of truth for `MenuWatt.xcodeproj`
+- `scripts/build-app.sh` re-signs the copied `.app` bundle so the packaged build can launch cleanly outside DerivedData
+- For the simplest GitHub-only release flow: run `./scripts/build-app.sh`, then `./scripts/package-dmg.sh`, then upload the generated DMG from `.build-app/`
+
 ## Notes
 
 - MenuWatt is a menu bar utility, so it launches as an accessory app rather than a dock app.
 - The app is not yet notarized with Apple. See the install section above for the Gatekeeper workaround.
+- GitHub release distribution is the intended path for this repo; notarization is optional and not required for the current workflow.
 
 ## Contributing
 
