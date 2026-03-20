@@ -1,3 +1,4 @@
+import Foundation
 import Testing
 @testable import MenuWatt
 
@@ -21,6 +22,13 @@ private final class LaunchAtLoginControllerMock: LaunchAtLoginControlling {
 
 private enum MockError: Error {
     case registrationFailed
+}
+
+private func makeTestDefaults(testName: String = #function) -> UserDefaults {
+    let suiteName = "MenuWattTests.AppPreferences.\(testName)"
+    let defaults = UserDefaults(suiteName: suiteName)!
+    defaults.removePersistentDomain(forName: suiteName)
+    return defaults
 }
 
 @Test

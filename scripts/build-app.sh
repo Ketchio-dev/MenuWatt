@@ -5,37 +5,35 @@ set -euo pipefail
 ROOT_DIR="$(cd "$(dirname "$0")/.." && pwd)"
 APP_NAME="MenuWatt"
 ARTIFACT_DIR="$ROOT_DIR/.build-app"
-SCRATCH_DIR="$(mktemp -d "${TMPDIR:-/tmp}/MenuWattBuild.XXXXXX")"
-
-cleanup() {
-  rm -rf "$SCRATCH_DIR"
-}
-
-trap cleanup EXIT
+DERIVED_DATA_DIR="$ROOT_DIR/.build-app-derived"
+BUILD_LOG="$ARTIFACT_DIR/xcodebuild.log"
 
 cd "$ROOT_DIR"
 
-swift build -c release --scratch-path "$SCRATCH_DIR"
+mkdir -p "$ARTIFACT_DIR"
+mkdir -p "$DERIVED_DATA_DIR"
 
-BIN_PATH="$(find "$SCRATCH_DIR" -type f -path "*/release/$APP_NAME" | head -n 1)"
-if [[ -z "$BIN_PATH" ]]; then
-  echo "Could not locate release binary for $APP_NAME" >&2
+echo "Building $APP_NAME with Xcode..."
+xcodebuild \
+  -project "$ROOT_DIR/MenuWatt.xcodeproj" \
+  -scheme "$APP_NAME" \
+  -configuration Release \
+  -derivedDataPath "$DERIVED_DATA_DIR" \
+  -disableAutomaticPackageResolution \
+  build >"$BUILD_LOG" 2>&1
+
+APP_BUILD_DIR="$DERIVED_DATA_DIR/Build/Products/Release"
+SOURCE_APP_DIR="$APP_BUILD_DIR/${APP_NAME}.app"
+APP_DIR="$ARTIFACT_DIR/${APP_NAME}.app"
+
+if [[ ! -d "$SOURCE_APP_DIR" ]]; then
+  echo "Could not locate built app bundle at $SOURCE_APP_DIR" >&2
+  echo "See build log: $BUILD_LOG" >&2
   exit 1
 fi
 
-mkdir -p "$ARTIFACT_DIR"
-APP_DIR="$ARTIFACT_DIR/${APP_NAME}.app"
-
 rm -rf "$APP_DIR"
-mkdir -p "$APP_DIR/Contents/MacOS" "$APP_DIR/Contents/Resources"
-
-cp "$BIN_PATH" "$APP_DIR/Contents/MacOS/$APP_NAME"
-cp "$ROOT_DIR/Packaging/Info.plist" "$APP_DIR/Contents/Info.plist"
-if [ -f "$ROOT_DIR/Packaging/Resources/AppIcon.icns" ]; then
-  cp "$ROOT_DIR/Packaging/Resources/AppIcon.icns" "$APP_DIR/Contents/Resources/AppIcon.icns"
-fi
-
-codesign --force --deep --sign - "$APP_DIR" >/dev/null 2>&1 || true
+ditto "$SOURCE_APP_DIR" "$APP_DIR"
 
 echo "Built app bundle at:"
 echo "$APP_DIR"

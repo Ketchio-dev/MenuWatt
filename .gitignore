@@ -1,6 +1,10 @@
 .build
-.build-app
+.build-*
 .DS_Store
 .omc/
+.omx/
 .claude/
+.xcode-home/
+MenuWatt.xcodeproj/
+default.profraw
 *.dmg

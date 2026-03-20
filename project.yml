@@ -1,0 +1,101 @@
+name: MenuWatt
+options:
+  bundleIdPrefix: com.junsu
+  deploymentTarget:
+    macOS: "13.0"
+  xcodeVersion: "16.0"
+  generateEmptyDirectories: true
+
+packages:
+  swift-testing:
+    url: https://github.com/swiftlang/swift-testing.git
+    exactVersion: "6.2.4"
+
+targets:
+  MenuWattCore:
+    type: framework
+    platform: macOS
+    sources:
+      - path: Sources/MenuWattCore
+    settings:
+      base:
+        PRODUCT_BUNDLE_IDENTIFIER: com.junsu.menuwatt.core
+        PRODUCT_NAME: MenuWattCore
+        PRODUCT_MODULE_NAME: MenuWattCore
+        CODE_SIGN_IDENTITY: "-"
+        CODE_SIGN_STYLE: Manual
+        MACOSX_DEPLOYMENT_TARGET: "13.0"
+        SWIFT_VERSION: "6.0"
+        DEFINES_MODULE: true
+        GENERATE_INFOPLIST_FILE: true
+
+  MenuWattSystem:
+    type: framework
+    platform: macOS
+    sources:
+      - path: Sources/MenuWattSystem
+    settings:
+      base:
+        PRODUCT_BUNDLE_IDENTIFIER: com.junsu.menuwatt.system
+        PRODUCT_NAME: MenuWattSystem
+        PRODUCT_MODULE_NAME: MenuWattSystem
+        CODE_SIGN_IDENTITY: "-"
+        CODE_SIGN_STYLE: Manual
+        MACOSX_DEPLOYMENT_TARGET: "13.0"
+        SWIFT_VERSION: "6.0"
+        DEFINES_MODULE: true
+        GENERATE_INFOPLIST_FILE: true
+    dependencies:
+      - target: MenuWattCore
+
+  MenuWatt:
+    type: application
+    platform: macOS
+    sources:
+      - path: Sources/MenuWatt
+    settings:
+      base:
+        PRODUCT_BUNDLE_IDENTIFIER: com.junsu.menuwatt
+        PRODUCT_NAME: MenuWatt
+        MARKETING_VERSION: "1.0.1"
+        CURRENT_PROJECT_VERSION: "2"
+        ENABLE_APP_SANDBOX: YES
+        ENABLE_HARDENED_RUNTIME: YES
+        ENABLE_OUTGOING_NETWORK_CONNECTIONS: YES
+        GENERATE_INFOPLIST_FILE: true
+        INFOPLIST_FILE: Packaging/Info.plist
+        INFOPLIST_KEY_CFBundleDisplayName: "MenuWatt"
+        INFOPLIST_KEY_NSHumanReadableCopyright: ""
+        INFOPLIST_KEY_NSPrincipalClass: NSApplication
+        CODE_SIGN_ENTITLEMENTS: MenuWatt.entitlements
+        CODE_SIGN_IDENTITY: "-"
+        CODE_SIGN_STYLE: Manual
+        MACOSX_DEPLOYMENT_TARGET: "13.0"
+        SWIFT_VERSION: "6.0"
+        COMBINE_HIDPI_IMAGES: true
+        LD_RUNPATH_SEARCH_PATHS:
+          - "@executable_path/../Frameworks"
+    resources:
+      - path: Packaging/Resources
+        buildPhase: resources
+    dependencies:
+      - target: MenuWattCore
+        embed: true
+      - target: MenuWattSystem
+        embed: true
+
+  MenuWattTests:
+    type: bundle.unit-test
+    platform: macOS
+    sources:
+      - path: Tests
+    settings:
+      base:
+        PRODUCT_BUNDLE_IDENTIFIER: com.junsu.menuwatt.tests
+        SWIFT_VERSION: "6.0"
+    dependencies:
+      - target: MenuWatt
+      - target: MenuWattCore
+      - target: MenuWattSystem
+      - package: swift-testing
+        product: Testing
