@@ -17,8 +17,11 @@ let package = Package(
             name: "MenuWattCore"
         ),
         .target(
+            name: "CIOReport"
+        ),
+        .target(
             name: "MenuWattSystem",
-            dependencies: ["MenuWattCore"]
+            dependencies: ["MenuWattCore", "CIOReport"]
         ),
         .executableTarget(
             name: "MenuWatt",

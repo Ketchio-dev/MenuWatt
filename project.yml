@@ -29,6 +29,28 @@ targets:
         DEFINES_MODULE: true
         GENERATE_INFOPLIST_FILE: true
 
+  CIOReport:
+    type: framework
+    platform: macOS
+    sources:
+      - path: Sources/CIOReport
+    settings:
+      base:
+        PRODUCT_BUNDLE_IDENTIFIER: com.junsu.menuwatt.cioreport
+        PRODUCT_NAME: CIOReport
+        PRODUCT_MODULE_NAME: CIOReport
+        CODE_SIGN_IDENTITY: "-"
+        CODE_SIGN_STYLE: Manual
+        MACOSX_DEPLOYMENT_TARGET: "13.0"
+        CLANG_ENABLE_MODULES: true
+        DEFINES_MODULE: true
+        GENERATE_INFOPLIST_FILE: true
+        HEADER_SEARCH_PATHS:
+          - "$(SRCROOT)/Sources/CIOReport/include"
+        OTHER_LDFLAGS:
+          - "-framework"
+          - "IOKit"
+
   MenuWattSystem:
     type: framework
     platform: macOS
@@ -47,6 +69,7 @@ targets:
         GENERATE_INFOPLIST_FILE: true
     dependencies:
       - target: MenuWattCore
+      - target: CIOReport
 
   MenuWatt:
     type: application
@@ -79,6 +102,8 @@ targets:
       - target: MenuWattCore
         embed: true
       - target: MenuWattSystem
+        embed: true
+      - target: CIOReport
         embed: true
 
   MenuWattTests:

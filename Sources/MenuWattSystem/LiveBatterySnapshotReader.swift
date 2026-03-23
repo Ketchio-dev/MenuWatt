@@ -177,6 +177,8 @@ private enum LiveBatteryPowerSourceReader {
 }
 
 struct SmartBatteryMetricsReader {
+    private let ioReportReader = IOReportPowerReader()
+
     func read() -> SmartBatteryMetrics? {
         guard let entry = matchingService(named: "AppleSmartBattery") else {
             return nil
@@ -196,9 +198,14 @@ struct SmartBatteryMetricsReader {
 
         let telemetry = properties["PowerTelemetryData"] as? [String: Any]
         let systemInputMilliWatts = number(from: telemetry?["SystemPowerIn"])?.doubleValue
-        let systemInputWatts = systemInputMilliWatts.map { $0 / 1000.0 }
         let systemLoadMilliWatts = number(from: telemetry?["SystemLoad"])?.doubleValue
-        let systemLoadWatts = systemLoadMilliWatts.map { $0 / 1000.0 }
+
+        // SMC-first: PSTR/PDTR are primary, PowerTelemetryData is fallback.
+        let smc = ioReportReader.read()
+        let systemLoadWatts = smc.systemPower
+            ?? systemLoadMilliWatts.map { $0 / 1000.0 }
+        let systemInputWatts = smc.deliveryRate
+            ?? systemInputMilliWatts.map { $0 / 1000.0 }
         let cycleCount = number(from: properties["CycleCount"])?.intValue
         let temperatureRaw = number(from: properties["Temperature"])?.doubleValue
         let temperatureCelsius = temperatureRaw.map { $0 / 100.0 }
