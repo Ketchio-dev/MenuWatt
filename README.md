@@ -2,9 +2,7 @@
 
 A lightweight macOS menu bar app that shows real-time power usage, battery status, and system metrics.
 
-<p align="center">
-  <img src=".github/screenshot.png" width="420" alt="MenuWatt screenshot">
-</p>
+![MenuWatt screenshot](.github/screenshot.png)
 
 ## Install
 
