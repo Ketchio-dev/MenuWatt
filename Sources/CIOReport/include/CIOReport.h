@@ -13,4 +13,16 @@ typedef struct {
 /// Fields are negative when a key is unavailable.
 SMCPowerReading SMCReadPower(void);
 
+/// Fan readings from the SMC. Up to two fans. Negative fields mean unavailable.
+typedef struct {
+    double fan0Rpm;
+    double fan0MaxRpm;
+    double fan1Rpm;
+    double fan1MaxRpm;
+} SMCFanReading;
+
+/// Read fan speeds (F0Ac/F0Mx/F1Ac/F1Mx) from the SMC.
+/// Negative fields indicate the key is unavailable (e.g. fanless Macs).
+SMCFanReading SMCReadFans(void);
+
 #endif /* CIOReport_h */

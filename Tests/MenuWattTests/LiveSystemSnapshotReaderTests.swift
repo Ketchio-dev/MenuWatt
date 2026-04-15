@@ -41,7 +41,10 @@ func cpuIsPrimedDuringInitializationSoFirstReadProducesUsage() {
                 )
             },
             readStorageStats: { StorageStats(usedBytes: 60, totalBytes: 100) },
-            readKernelPressureLevel: { .normal }
+            readKernelPressureLevel: { .normal },
+            readGPUUtilization: { nil },
+            readFans: { nil },
+            readNetworkCounters: { nil }
         )
     )
 
@@ -64,7 +67,10 @@ func memoryAndStorageBecomeUnavailableWhenReadersFailIndependently() {
             readCPUCounters: { countersQueue.next() },
             readMemoryStats: { nil },
             readStorageStats: { nil },
-            readKernelPressureLevel: { .warn }
+            readKernelPressureLevel: { .warn },
+            readGPUUtilization: { nil },
+            readFans: { nil },
+            readNetworkCounters: { nil }
         )
     )
 

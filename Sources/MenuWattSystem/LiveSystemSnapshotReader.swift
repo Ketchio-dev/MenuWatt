@@ -1,6 +1,8 @@
 import Darwin
 import Foundation
+import IOKit
 import MenuWattCore
+import CIOReport
 
 public final class LiveSystemSnapshotReader {
     struct Readers: Sendable {
@@ -8,35 +10,55 @@ public final class LiveSystemSnapshotReader {
         let readMemoryStats: @Sendable () -> MemoryStats?
         let readStorageStats: @Sendable () -> StorageStats?
         let readKernelPressureLevel: @Sendable () -> PressureLevel
+        let readGPUUtilization: @Sendable () -> Double?
+        let readFans: @Sendable () -> [FanReading]?
+        let readNetworkCounters: @Sendable () -> NetworkCounters?
 
         static let live = Readers(
             readCPUCounters: SystemReaders.readCPUCounters,
             readMemoryStats: SystemReaders.readMemoryStats,
             readStorageStats: SystemReaders.readStorageStats,
-            readKernelPressureLevel: SystemReaders.readKernelPressureLevel
+            readKernelPressureLevel: SystemReaders.readKernelPressureLevel,
+            readGPUUtilization: SystemReaders.readGPUUtilization,
+            readFans: SystemReaders.readFans,
+            readNetworkCounters: SystemReaders.readNetworkCounters
         )
     }
 
     private var previousCPUCounters: CPUCounters?
     private var cpuHistory = HistoryBuffer()
     private var pressureHistory = HistoryBuffer()
+    private var gpuHistory = HistoryBuffer()
+    private var networkHistory = HistoryBuffer()
+    private var previousNetworkCounters: NetworkCounters?
+    private var previousNetworkTimestamp: TimeInterval?
     private let readers: Readers
+    private let clock: @Sendable () -> TimeInterval
 
     public init() {
         self.readers = .live
+        self.clock = { Date().timeIntervalSince1970 }
         self.previousCPUCounters = readers.readCPUCounters()
+        self.previousNetworkCounters = readers.readNetworkCounters()
+        self.previousNetworkTimestamp = clock()
     }
 
-    init(readers: Readers) {
+    init(readers: Readers, clock: @Sendable @escaping () -> TimeInterval = { Date().timeIntervalSince1970 }) {
         self.readers = readers
+        self.clock = clock
         self.previousCPUCounters = readers.readCPUCounters()
+        self.previousNetworkCounters = readers.readNetworkCounters()
+        self.previousNetworkTimestamp = clock()
     }
 
     public func read() -> SystemSnapshot {
         SystemSnapshot(
             cpu: readCPU(),
             memory: readMemory(),
-            storage: readStorage()
+            storage: readStorage(),
+            gpu: readGPU(),
+            fan: readFan(),
+            network: readNetwork()
         )
     }
 
@@ -124,6 +146,62 @@ public final class LiveSystemSnapshotReader {
 
         let usedPercent = Double(stats.usedBytes) / total * 100
         return StorageSnapshot(usedPercent: usedPercent, usedBytes: stats.usedBytes, totalBytes: stats.totalBytes)
+    }
+
+    private func readGPU() -> GPUSnapshot {
+        guard let utilization = readers.readGPUUtilization() else {
+            return .unavailable
+        }
+        let clamped = min(max(utilization, 0), 100)
+        gpuHistory.append(clamped)
+        return GPUSnapshot(utilizationPercent: clamped, history: gpuHistory.samples)
+    }
+
+    private func readFan() -> FanSnapshot {
+        guard let fans = readers.readFans(), !fans.isEmpty else {
+            return .unavailable
+        }
+        return FanSnapshot(fans: fans)
+    }
+
+    private func readNetwork() -> NetworkSnapshot {
+        guard let counters = readers.readNetworkCounters() else {
+            return .unavailable
+        }
+        let now = clock()
+        defer {
+            previousNetworkCounters = counters
+            previousNetworkTimestamp = now
+        }
+
+        guard
+            let previous = previousNetworkCounters,
+            let previousTimestamp = previousNetworkTimestamp
+        else {
+            networkHistory.append(0)
+            return NetworkSnapshot(
+                downloadBytesPerSecond: 0,
+                uploadBytesPerSecond: 0,
+                totalDownBytes: counters.downBytes,
+                totalUpBytes: counters.upBytes,
+                history: networkHistory.samples
+            )
+        }
+
+        let elapsed = max(now - previousTimestamp, 0.001)
+        let downDelta = counters.downBytes >= previous.downBytes ? counters.downBytes - previous.downBytes : 0
+        let upDelta = counters.upBytes >= previous.upBytes ? counters.upBytes - previous.upBytes : 0
+        let downRate = Double(downDelta) / elapsed
+        let upRate = Double(upDelta) / elapsed
+        networkHistory.append(downRate + upRate)
+
+        return NetworkSnapshot(
+            downloadBytesPerSecond: downRate,
+            uploadBytesPerSecond: upRate,
+            totalDownBytes: counters.downBytes,
+            totalUpBytes: counters.upBytes,
+            history: networkHistory.samples
+        )
     }
 
     private func memoryPressurePercent(for stats: MemoryStats) -> Double {
@@ -223,6 +301,89 @@ private enum SystemReaders {
         default:
             return .normal
         }
+    }
+
+    static func readGPUUtilization() -> Double? {
+        var iterator: io_iterator_t = 0
+        guard let matching = IOServiceMatching("IOAccelerator") else { return nil }
+        let kr = IOServiceGetMatchingServices(kIOMainPortDefault, matching, &iterator)
+        guard kr == KERN_SUCCESS else { return nil }
+        defer { IOObjectRelease(iterator) }
+
+        var best: Double?
+        while case let entry = IOIteratorNext(iterator), entry != 0 {
+            defer { IOObjectRelease(entry) }
+            guard let props = IORegistryEntryCreateCFProperty(
+                entry,
+                "PerformanceStatistics" as CFString,
+                kCFAllocatorDefault,
+                0
+            )?.takeRetainedValue() as? [String: Any] else {
+                continue
+            }
+
+            let candidateKeys = ["Device Utilization %", "GPU Activity(%)", "GPU Core Utilization"]
+            for key in candidateKeys {
+                if let number = props[key] as? NSNumber {
+                    let value = number.doubleValue
+                    // GPU Core Utilization is reported in nanoseconds-busy — skip that scale.
+                    if key == "GPU Core Utilization" && value > 100 {
+                        continue
+                    }
+                    if best == nil || value > best! {
+                        best = value
+                    }
+                    break
+                }
+            }
+        }
+
+        return best
+    }
+
+    static func readFans() -> [FanReading]? {
+        let reading = SMCReadFans()
+        var result: [FanReading] = []
+
+        if reading.fan0Rpm >= 0 {
+            let maxRpm = reading.fan0MaxRpm > 0 ? reading.fan0MaxRpm : nil
+            result.append(FanReading(index: 0, rpm: reading.fan0Rpm, maxRpm: maxRpm))
+        }
+        if reading.fan1Rpm >= 0 {
+            let maxRpm = reading.fan1MaxRpm > 0 ? reading.fan1MaxRpm : nil
+            result.append(FanReading(index: 1, rpm: reading.fan1Rpm, maxRpm: maxRpm))
+        }
+
+        return result.isEmpty ? nil : result
+    }
+
+    static func readNetworkCounters() -> NetworkCounters? {
+        var ifapPointer: UnsafeMutablePointer<ifaddrs>?
+        guard getifaddrs(&ifapPointer) == 0, let first = ifapPointer else {
+            return nil
+        }
+        defer { freeifaddrs(first) }
+
+        var totalDown: UInt64 = 0
+        var totalUp: UInt64 = 0
+        var current: UnsafeMutablePointer<ifaddrs>? = first
+        while let ptr = current {
+            let ifa = ptr.pointee
+            current = ifa.ifa_next
+
+            guard let addr = ifa.ifa_addr else { continue }
+            guard Int32(addr.pointee.sa_family) == AF_LINK else { continue }
+            let flags = Int32(ifa.ifa_flags)
+            guard (flags & IFF_UP) != 0 else { continue }
+            guard (flags & IFF_LOOPBACK) == 0 else { continue }
+            guard let dataPointer = ifa.ifa_data else { continue }
+
+            let data = dataPointer.assumingMemoryBound(to: if_data.self).pointee
+            totalDown &+= UInt64(data.ifi_ibytes)
+            totalUp &+= UInt64(data.ifi_obytes)
+        }
+
+        return NetworkCounters(downBytes: totalDown, upBytes: totalUp)
     }
 
     private static func readSwapUsageBytes() -> UInt64? {

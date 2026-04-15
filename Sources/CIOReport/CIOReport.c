@@ -80,3 +80,18 @@ SMCPowerReading SMCReadPower(void) {
     IOServiceClose(conn);
     return reading;
 }
+
+SMCFanReading SMCReadFans(void) {
+    SMCFanReading reading = { -1, -1, -1, -1 };
+
+    io_connect_t conn = openSMC();
+    if (!conn) return reading;
+
+    reading.fan0Rpm = readFloat(conn, "F0Ac");
+    reading.fan0MaxRpm = readFloat(conn, "F0Mx");
+    reading.fan1Rpm = readFloat(conn, "F1Ac");
+    reading.fan1MaxRpm = readFloat(conn, "F1Mx");
+
+    IOServiceClose(conn);
+    return reading;
+}
