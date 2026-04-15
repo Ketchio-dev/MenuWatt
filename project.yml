@@ -76,12 +76,14 @@ targets:
     platform: macOS
     sources:
       - path: Sources/MenuWatt
+      - path: Packaging/Resources
+        buildPhase: resources
     settings:
       base:
         PRODUCT_BUNDLE_IDENTIFIER: com.junsu.menuwatt
         PRODUCT_NAME: MenuWatt
-        MARKETING_VERSION: "1.0.2"
-        CURRENT_PROJECT_VERSION: "3"
+        MARKETING_VERSION: "1.1.0"
+        CURRENT_PROJECT_VERSION: "4"
         ENABLE_HARDENED_RUNTIME: YES
         GENERATE_INFOPLIST_FILE: true
         INFOPLIST_FILE: Packaging/Info.plist
@@ -95,9 +97,6 @@ targets:
         COMBINE_HIDPI_IMAGES: true
         LD_RUNPATH_SEARCH_PATHS:
           - "@executable_path/../Frameworks"
-    resources:
-      - path: Packaging/Resources
-        buildPhase: resources
     dependencies:
       - target: MenuWattCore
         embed: true

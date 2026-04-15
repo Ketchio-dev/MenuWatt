@@ -42,6 +42,13 @@ Works on all Apple Silicon Macs (M1-M5) without root privileges.
 
 Requires Xcode and [xcodegen](https://github.com/yonaskolb/XcodeGen).
 
+## Support
+
+Questions, bug reports, or feature requests:
+
+- [GitHub Issues](https://github.com/Ketchio-dev/MenuWatt/issues)
+- [Discord community](https://discord.gg/Cc2RGrN7dh)
+
 ## License
 
 [MIT](LICENSE)
