@@ -47,3 +47,74 @@ func memoryAndStoragePresentationsHideUnavailableDetails() {
     #expect(storageAvailable.showsProgress)
     #expect(storageAvailable.unavailableMessage == nil)
 }
+
+@Test
+func gpuPresentationReflectsAvailability() {
+    let unavailable = GPUSectionPresentation.make(from: .unavailable)
+    let available = GPUSectionPresentation.make(
+        from: GPUSnapshot(utilizationPercent: 30, history: [10, 20, 30])
+    )
+
+    #expect(!unavailable.showsProgress)
+    #expect(!unavailable.showsHistory)
+    #expect(unavailable.unavailableMessage == "GPU usage data is unavailable.")
+
+    #expect(available.showsProgress)
+    #expect(available.showsHistory)
+    #expect(available.unavailableMessage == nil)
+}
+
+@Test
+func fanPresentationHidesEmptyFansAndShowsAvailable() {
+    let unavailable = FanSectionPresentation.make(from: .unavailable)
+    let available = FanSectionPresentation.make(
+        from: FanSnapshot(fans: [FanReading(index: 0, rpm: 1500, maxRpm: 5000)])
+    )
+
+    #expect(unavailable.fans.isEmpty)
+    #expect(unavailable.unavailableMessage != nil)
+
+    #expect(available.fans.count == 1)
+    #expect(available.unavailableMessage == nil)
+}
+
+@Test
+func networkPresentationFormatsRatesAndTotals() {
+    let unavailable = NetworkSectionPresentation.make(from: .unavailable)
+    let available = NetworkSectionPresentation.make(
+        from: NetworkSnapshot(
+            downloadBytesPerSecond: 2_048,
+            uploadBytesPerSecond: 1_024,
+            totalDownBytes: 10_000_000,
+            totalUpBytes: 5_000_000,
+            history: [100, 200]
+        )
+    )
+
+    #expect(unavailable.showsHistory == false)
+    #expect(unavailable.unavailableMessage != nil)
+
+    #expect(available.unavailableMessage == nil)
+    #expect(available.showsHistory)
+    #expect(available.downloadText.contains("/s"))
+    #expect(!available.totalsText.isEmpty)
+}
+
+@Test
+func processEnergyPresentationHidesWhenUnavailable() {
+    let hidden = ProcessEnergySectionPresentation.make(from: .unavailable)
+    let priming = ProcessEnergySectionPresentation.make(
+        from: ProcessEnergySnapshot(entries: [], isAvailable: true)
+    )
+    let populated = ProcessEnergySectionPresentation.make(
+        from: ProcessEnergySnapshot(entries: [
+            ProcessEnergyEntry(pid: 1, name: "test", energyImpact: 5, cpuPercent: 1)
+        ])
+    )
+
+    #expect(hidden.isHidden)
+    #expect(!priming.isHidden)
+    #expect(priming.unavailableMessage != nil)
+    #expect(!populated.isHidden)
+    #expect(populated.entries.count == 1)
+}

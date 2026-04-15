@@ -6,7 +6,7 @@ import MenuWattSystem
 @MainActor
 final class PowerMonitor: ObservableObject {
     struct Configuration: Sendable {
-        let refreshInterval: TimeInterval
+        var refreshInterval: TimeInterval
         let animationMinimumInterval: TimeInterval
 
         static let live = Configuration(
@@ -17,6 +17,7 @@ final class PowerMonitor: ObservableObject {
 
     @Published private(set) var snapshot = BatterySnapshot.unavailable
     @Published private(set) var systemSnapshot = SystemSnapshot.unavailable
+    @Published private(set) var processSnapshot = ProcessEnergySnapshot.unavailable
     @Published private(set) var currentFrame = SpriteRenderer.image(for: .run1)
 
     private(set) var currentSpriteFrame = SpriteFrame.run1
@@ -29,8 +30,16 @@ final class PowerMonitor: ObservableObject {
     private var isRunning = false
 
     private let sampler: any MonitorSampling
-    private let configuration: Configuration
+    private var configuration: Configuration
     private let logger = MenuWattDiagnostics.monitoring
+
+    var batteryTransitionHandler: ((BatterySnapshot, BatterySnapshot) -> Void)?
+
+    func setRefreshInterval(_ interval: TimeInterval) {
+        guard configuration.refreshInterval != interval else { return }
+        configuration.refreshInterval = interval
+        logger.info("Refresh interval updated to \(interval, privacy: .public)s")
+    }
 
     init(
         sampler: any MonitorSampling = LiveMonitorSampler(),
@@ -131,7 +140,9 @@ final class PowerMonitor: ObservableObject {
 
         snapshot = nextSnapshot
         systemSnapshot = payload.system
+        processSnapshot = payload.processes
         logTransitions(fromBattery: previousBattery, toBattery: nextSnapshot, fromSystem: previousSystem, toSystem: payload.system)
+        batteryTransitionHandler?(previousBattery, nextSnapshot)
 
         if resetAnimation || previousState != nextSnapshot.state {
             frameIndex = 0

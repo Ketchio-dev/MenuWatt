@@ -5,27 +5,56 @@ import MenuWattCore
 struct MonitorPanelView: View {
     let battery: BatterySnapshot
     let system: SystemSnapshot
+    let processes: ProcessEnergySnapshot
     let sprite: NSImage
+    let visibleSections: Set<DashboardSection>
 
     var body: some View {
+        let processPresentation = ProcessEnergySectionPresentation.make(from: processes)
+        let showsProcesses = visibleSections.contains(.processes) && !processPresentation.isHidden
+
         VStack(spacing: 0) {
             HeroRow(battery: battery, sprite: sprite)
 
-            Divider().padding(.horizontal, 10)
+            if visibleSections.contains(.battery) {
+                Divider().padding(.horizontal, 10)
+                BatterySection(snapshot: battery)
+            }
 
-            BatterySection(snapshot: battery)
+            if visibleSections.contains(.cpu) {
+                Divider().padding(.horizontal, 10)
+                CPUSection(snapshot: system.cpu)
+            }
 
-            Divider().padding(.horizontal, 10)
+            if visibleSections.contains(.memory) {
+                Divider().padding(.horizontal, 10)
+                MemorySection(snapshot: system.memory)
+            }
 
-            CPUSection(snapshot: system.cpu)
+            if visibleSections.contains(.gpu) {
+                Divider().padding(.horizontal, 10)
+                GPUSection(snapshot: system.gpu)
+            }
 
-            Divider().padding(.horizontal, 10)
+            if visibleSections.contains(.fan) {
+                Divider().padding(.horizontal, 10)
+                FanSection(snapshot: system.fan)
+            }
 
-            MemorySection(snapshot: system.memory)
+            if visibleSections.contains(.network) {
+                Divider().padding(.horizontal, 10)
+                NetworkSection(snapshot: system.network)
+            }
 
-            Divider().padding(.horizontal, 10)
+            if visibleSections.contains(.storage) {
+                Divider().padding(.horizontal, 10)
+                StorageSection(snapshot: system.storage)
+            }
 
-            StorageSection(snapshot: system.storage)
+            if showsProcesses {
+                Divider().padding(.horizontal, 10)
+                ProcessEnergySectionView(presentation: processPresentation)
+            }
         }
     }
 }
@@ -237,6 +266,242 @@ struct StorageSection: View {
         if percent > 90 { return .red }
         if percent > 75 { return .orange }
         return .cyan
+    }
+}
+
+struct GPUSection: View {
+    let snapshot: GPUSnapshot
+
+    var body: some View {
+        let presentation = GPUSectionPresentation.make(from: snapshot)
+
+        VStack(alignment: .leading, spacing: 5) {
+            HStack {
+                Label("GPU", systemImage: "display")
+                    .font(.system(size: 11, weight: .semibold))
+                    .foregroundStyle(.secondary)
+                Spacer()
+                Text(presentation.titleValue)
+                    .font(.system(size: 12, weight: .semibold, design: .monospaced))
+                    .monospacedDigit()
+            }
+
+            if presentation.showsProgress {
+                NativeProgressBar(value: snapshot.utilizationPercent / 100, tint: gpuTint(snapshot.utilizationPercent))
+            }
+
+            if presentation.showsHistory {
+                MiniGraphView(primarySamples: snapshot.history, secondarySamples: [], primaryColor: .purple)
+                    .frame(height: 32)
+            }
+
+            if let unavailableMessage = presentation.unavailableMessage {
+                UnavailableCaption(unavailableMessage)
+            }
+        }
+        .padding(.horizontal, 12)
+        .padding(.vertical, 6)
+    }
+
+    private func gpuTint(_ usage: Double) -> Color {
+        if usage > 80 { return .red }
+        if usage > 50 { return .orange }
+        return .purple
+    }
+}
+
+struct FanSection: View {
+    let snapshot: FanSnapshot
+
+    var body: some View {
+        let presentation = FanSectionPresentation.make(from: snapshot)
+
+        VStack(alignment: .leading, spacing: 5) {
+            HStack {
+                Label("Fans", systemImage: "fan")
+                    .font(.system(size: 11, weight: .semibold))
+                    .foregroundStyle(.secondary)
+                Spacer()
+                Text(presentation.titleValue)
+                    .font(.system(size: 12, weight: .semibold, design: .monospaced))
+                    .monospacedDigit()
+            }
+
+            if !presentation.fans.isEmpty {
+                HStack(spacing: 0) {
+                    ForEach(presentation.fans) { fan in
+                        InlineMetric(label: "Fan \(fan.index)", value: fanValueText(fan))
+                    }
+                }
+            }
+
+            if let unavailableMessage = presentation.unavailableMessage {
+                UnavailableCaption(unavailableMessage)
+            }
+        }
+        .padding(.horizontal, 12)
+        .padding(.vertical, 6)
+    }
+
+    private func fanValueText(_ fan: FanReading) -> String {
+        if let percent = fan.percent {
+            return String(format: "%.0f RPM (%.0f%%)", fan.rpm, percent)
+        }
+        return String(format: "%.0f RPM", fan.rpm)
+    }
+}
+
+struct NetworkSection: View {
+    let snapshot: NetworkSnapshot
+
+    var body: some View {
+        let presentation = NetworkSectionPresentation.make(from: snapshot)
+
+        VStack(alignment: .leading, spacing: 5) {
+            HStack {
+                Label("Network", systemImage: "network")
+                    .font(.system(size: 11, weight: .semibold))
+                    .foregroundStyle(.secondary)
+                Spacer()
+                Text(presentation.titleValue)
+                    .font(.system(size: 12, weight: .semibold, design: .monospaced))
+                    .monospacedDigit()
+            }
+
+            if presentation.unavailableMessage == nil {
+                HStack(spacing: 0) {
+                    InlineMetric(label: "↓", value: presentation.downloadText)
+                    InlineMetric(label: "↑", value: presentation.uploadText)
+                }
+                if !presentation.totalsText.isEmpty {
+                    Text(presentation.totalsText)
+                        .font(.system(size: 10, design: .monospaced))
+                        .foregroundStyle(.tertiary)
+                        .monospacedDigit()
+                }
+            }
+
+            if presentation.showsHistory {
+                MiniGraphView(primarySamples: snapshot.history, secondarySamples: [], primaryColor: .green)
+                    .frame(height: 32)
+            }
+
+            if let unavailableMessage = presentation.unavailableMessage {
+                UnavailableCaption(unavailableMessage)
+            }
+        }
+        .padding(.horizontal, 12)
+        .padding(.vertical, 6)
+    }
+}
+
+struct ProcessEnergySectionView: View {
+    let presentation: ProcessEnergySectionPresentation
+
+    var body: some View {
+        VStack(alignment: .leading, spacing: 5) {
+            HStack {
+                Label("Top Energy", systemImage: "bolt")
+                    .font(.system(size: 11, weight: .semibold))
+                    .foregroundStyle(.secondary)
+                Spacer()
+            }
+
+            if let unavailableMessage = presentation.unavailableMessage {
+                UnavailableCaption(unavailableMessage)
+            }
+
+            ForEach(presentation.entries) { entry in
+                ProcessEnergyRow(entry: entry)
+            }
+        }
+        .padding(.horizontal, 12)
+        .padding(.vertical, 6)
+    }
+}
+
+struct ProcessEnergyRow: View {
+    let entry: ProcessEnergyEntry
+
+    @State private var isHovering = false
+    private var runningApp: NSRunningApplication? {
+        NSRunningApplication(processIdentifier: entry.pid)
+    }
+
+    var body: some View {
+        let app = runningApp
+        let displayName = app?.localizedName ?? entry.name
+
+        Button {
+            activate(app)
+        } label: {
+            HStack(spacing: 6) {
+                ProcessIcon(icon: app?.icon)
+                Text(displayName)
+                    .font(.system(size: 11))
+                    .lineLimit(1)
+                    .truncationMode(.middle)
+                    .frame(maxWidth: .infinity, alignment: .leading)
+                Text(String(format: "%.1f", entry.energyImpact))
+                    .font(.system(size: 11, weight: .medium, design: .monospaced))
+                    .foregroundStyle(.secondary)
+                    .monospacedDigit()
+            }
+            .padding(.horizontal, 4)
+            .padding(.vertical, 2)
+            .background(
+                RoundedRectangle(cornerRadius: 4, style: .continuous)
+                    .fill(isHovering ? Color.primary.opacity(0.08) : Color.clear)
+            )
+            .contentShape(RoundedRectangle(cornerRadius: 4, style: .continuous))
+        }
+        .buttonStyle(.plain)
+        .onHover { isHovering = $0 }
+        .help("Click to activate • Right-click for more")
+        .contextMenu {
+            if let app {
+                Button("Activate \(displayName)") { activate(app) }
+                Button("Quit \(displayName)") { app.terminate() }
+                Button("Force Quit \(displayName)") { app.forceTerminate() }
+                Divider()
+            }
+            Button("Open Activity Monitor") { openActivityMonitor() }
+            Button("Copy PID (\(entry.pid))") {
+                NSPasteboard.general.clearContents()
+                NSPasteboard.general.setString(String(entry.pid), forType: .string)
+            }
+        }
+    }
+
+    private func activate(_ app: NSRunningApplication?) {
+        if let app {
+            app.activate(options: [.activateIgnoringOtherApps])
+        } else {
+            openActivityMonitor()
+        }
+    }
+
+    private func openActivityMonitor() {
+        let url = URL(fileURLWithPath: "/System/Applications/Utilities/Activity Monitor.app")
+        NSWorkspace.shared.open(url)
+    }
+}
+
+struct ProcessIcon: View {
+    let icon: NSImage?
+
+    var body: some View {
+        Group {
+            if let icon {
+                Image(nsImage: icon)
+                    .resizable()
+                    .interpolation(.high)
+            } else {
+                Image(systemName: "gearshape.fill")
+                    .foregroundStyle(.secondary)
+            }
+        }
+        .frame(width: 14, height: 14)
     }
 }
 
