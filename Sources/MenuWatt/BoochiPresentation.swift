@@ -52,12 +52,26 @@ struct BoochiPresentation {
                 baseInterval: 1.0,
                 fallbackFrame: .run1
             )
+        case .absent:
+            return BoochiPresentation(
+                title: "System Power",
+                themeColor: .blue,
+                animationFrames: runningFrames,
+                baseInterval: 0.45,
+                fallbackFrame: .run1
+            )
         }
     }
 
     static func tooltip(for snapshot: BatterySnapshot) -> String {
         let title = make(for: snapshot.state).title
-        let headline = "\(snapshot.percentage)% \(title)"
+        let headline: String
+        if snapshot.state == .absent {
+            // No battery — lead with the live power draw instead of "0%".
+            headline = snapshot.menuBarPowerText.map { "\(title) \($0)" } ?? title
+        } else {
+            headline = "\(snapshot.percentage)% \(title)"
+        }
         let extraLines = [
             snapshot.timeDescription,
             snapshot.rateDescription,

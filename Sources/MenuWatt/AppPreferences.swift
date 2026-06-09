@@ -226,7 +226,12 @@ final class AppPreferences: ObservableObject {
         static let autoCheckForUpdates = "autoCheckForUpdates"
         static let lastUpdateCheck = "lastUpdateCheck"
         static let visibleDashboardSections = "visibleDashboardSections"
+        static let knownDashboardSections = "knownDashboardSections"
     }
+
+    /// Sections that shipped before per-section visibility tracking existed. Used
+    /// as the migration baseline so sections added later default to visible.
+    private static let legacyKnownSections: Set<DashboardSection> = [.battery, .cpu, .memory, .storage]
 
     @Published private(set) var launchesAtLogin: Bool
     @Published private(set) var launchAtLoginError: String?
@@ -347,10 +352,24 @@ final class AppPreferences: ObservableObject {
         self.lastUpdateCheck = defaults.object(forKey: Keys.lastUpdateCheck) as? Date
 
         if let stored = defaults.array(forKey: Keys.visibleDashboardSections) as? [String] {
-            self.visibleDashboardSections = Set(stored.compactMap(DashboardSection.init(rawValue:)))
+            var visible = Set(stored.compactMap(DashboardSection.init(rawValue:)))
+
+            // Sections introduced after the user's preference was last saved are
+            // not in the stored set; without this they would stay hidden forever
+            // (e.g. GPU/Fans/Network/Top Energy after upgrading an older install).
+            let known: Set<DashboardSection>
+            if let knownRaw = defaults.array(forKey: Keys.knownDashboardSections) as? [String] {
+                known = Set(knownRaw.compactMap(DashboardSection.init(rawValue:)))
+            } else {
+                known = Self.legacyKnownSections
+            }
+            visible.formUnion(DashboardSection.allCases.filter { !known.contains($0) })
+            self.visibleDashboardSections = visible
+            defaults.set(visible.map(\.rawValue), forKey: Keys.visibleDashboardSections)
         } else {
             self.visibleDashboardSections = Set(DashboardSection.allCases)
         }
+        defaults.set(DashboardSection.allCases.map(\.rawValue), forKey: Keys.knownDashboardSections)
 
         if let initialError {
             logger.error("\(initialError, privacy: .public)")

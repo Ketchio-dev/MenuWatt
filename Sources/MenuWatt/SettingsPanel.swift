@@ -1,5 +1,6 @@
 import AppKit
 import SwiftUI
+import MenuWattSystem
 
 private enum SettingsPanelStyle {
     static let windowSize = NSSize(width: 720, height: 520)
@@ -350,7 +351,7 @@ private struct OverviewSettingsPane: View {
             }
 
             SettingsCard(title: "Dashboard Sections", systemImage: "square.stack.3d.up") {
-                ForEach(DashboardSection.allCases) { section in
+                ForEach(availableSections) { section in
                     SettingsRow(label: section.title) {
                         Toggle("", isOn: dashboardSectionBinding(for: section))
                             .labelsHidden()
@@ -364,6 +365,13 @@ private struct OverviewSettingsPane: View {
                     .frame(maxWidth: .infinity, alignment: .leading)
                     .padding(.top, 4)
             }
+        }
+    }
+
+    // Desktop Macs have no battery — don't offer a Battery section toggle there.
+    private var availableSections: [DashboardSection] {
+        DashboardSection.allCases.filter { section in
+            section != .battery || HostCapabilities.hasInternalBattery
         }
     }
 

@@ -53,6 +53,35 @@ func onBatteryMenuBarPowerTextPrefersSystemLoadThenBatteryWatts() {
 }
 
 @Test
+func absentMenuBarPowerTextPrefersSystemLoadThenInput() {
+    let preferredLoad = makeSnapshot(
+        state: .absent,
+        batteryWatts: nil,
+        adapterWatts: nil,
+        systemInputWatts: 30.0,
+        systemLoadWatts: 18.5
+    )
+    let inputFallback = makeSnapshot(
+        state: .absent,
+        batteryWatts: nil,
+        adapterWatts: nil,
+        systemInputWatts: 30.0,
+        systemLoadWatts: nil
+    )
+    let none = makeSnapshot(
+        state: .absent,
+        batteryWatts: nil,
+        adapterWatts: nil,
+        systemInputWatts: nil,
+        systemLoadWatts: nil
+    )
+
+    #expect(preferredLoad.menuBarPowerText == "18.5W")
+    #expect(inputFallback.menuBarPowerText == "30.0W")
+    #expect(none.menuBarPowerText == nil)
+}
+
+@Test
 func adapterDescriptionIncludesInputWhenAvailable() {
     let snapshot = makeSnapshot(
         state: .pluggedIn,

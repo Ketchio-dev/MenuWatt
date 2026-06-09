@@ -49,7 +49,34 @@ func batteryReaderBuildsChargingSnapshotFromInjectedDependencies() {
 }
 
 @Test
-func batteryReaderReturnsUnavailableWhenPowerSourceCannotBeRead() {
+func batteryReaderReportsAbsentWithSystemPowerWhenNoPowerSource() {
+    let reader = LiveBatterySnapshotReader(
+        dependencies: .init(
+            readPowerSourceSnapshot: { nil },
+            readMetrics: {
+                SmartBatteryMetrics(
+                    batteryWatts: nil,
+                    adapterWatts: nil,
+                    systemInputWatts: 30.0,
+                    systemLoadWatts: 18.5,
+                    cycleCount: nil,
+                    temperatureCelsius: nil
+                )
+            },
+            now: { Date(timeIntervalSince1970: 1234) }
+        )
+    )
+
+    let snapshot = reader.read()
+
+    #expect(snapshot.state == .absent)
+    #expect(snapshot.systemLoadWatts == 18.5)
+    #expect(snapshot.menuBarPowerText == "18.5W")
+    #expect(snapshot.updatedAt == Date(timeIntervalSince1970: 1234))
+}
+
+@Test
+func batteryReaderReportsAbsentWithoutPowerTextWhenNoMetrics() {
     let reader = LiveBatterySnapshotReader(
         dependencies: .init(
             readPowerSourceSnapshot: { nil },
@@ -60,6 +87,6 @@ func batteryReaderReturnsUnavailableWhenPowerSourceCannotBeRead() {
 
     let snapshot = reader.read()
 
-    #expect(snapshot.state == .unavailable)
+    #expect(snapshot.state == .absent)
     #expect(snapshot.menuBarPowerText == nil)
 }

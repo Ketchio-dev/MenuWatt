@@ -85,7 +85,8 @@ private struct MenuBarLabel: View {
         case .power:
             return monitor.snapshot.menuBarPowerText
         case .battery:
-            guard monitor.snapshot.state != .unavailable else { return nil }
+            guard monitor.snapshot.state != .unavailable,
+                  monitor.snapshot.state != .absent else { return nil }
             return "\(monitor.snapshot.percentage)%"
         case .cpu:
             guard monitor.systemSnapshot.cpu.isAvailable else { return nil }

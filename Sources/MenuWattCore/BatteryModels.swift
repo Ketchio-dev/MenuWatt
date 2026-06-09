@@ -5,7 +5,10 @@ public enum BatteryState: Equatable, Sendable {
     case pluggedIn
     case onBattery
     case full
+    /// Battery hardware exists but its data could not be read right now (transient).
     case unavailable
+    /// This Mac has no internal battery (desktop: Mac mini / Studio / Pro / iMac).
+    case absent
 }
 
 public struct BatteryTimeEstimate: Sendable {
@@ -215,6 +218,14 @@ public struct BatterySnapshot: Sendable {
             }
             if let adapterWatts, adapterWatts > 0 {
                 return String(format: "%.0fW", adapterWatts)
+            }
+        case .absent:
+            // Desktop Mac with no battery: report the live system power draw.
+            if let systemLoadWatts, systemLoadWatts > 0.05 {
+                return String(format: "%.1fW", systemLoadWatts)
+            }
+            if let systemInputWatts, systemInputWatts > 0.05 {
+                return String(format: "%.1fW", systemInputWatts)
             }
         case .unavailable:
             break

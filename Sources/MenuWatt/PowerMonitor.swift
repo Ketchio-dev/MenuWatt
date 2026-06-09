@@ -184,10 +184,14 @@ final class PowerMonitor: ObservableObject {
             logger.info("Battery state changed to \(String(describing: nextBattery.state), privacy: .public)")
         }
 
-        logAvailabilityChange(component: "battery", wasAvailable: previousBattery.state != .unavailable, isAvailable: nextBattery.state != .unavailable)
+        logAvailabilityChange(component: "battery", wasAvailable: isBatteryPresent(previousBattery.state), isAvailable: isBatteryPresent(nextBattery.state))
         logAvailabilityChange(component: "cpu", wasAvailable: previousSystem.cpu.isAvailable, isAvailable: nextSystem.cpu.isAvailable)
         logAvailabilityChange(component: "memory", wasAvailable: previousSystem.memory.isAvailable, isAvailable: nextSystem.memory.isAvailable)
         logAvailabilityChange(component: "storage", wasAvailable: previousSystem.storage.isAvailable, isAvailable: nextSystem.storage.isAvailable)
+    }
+
+    private func isBatteryPresent(_ state: BatteryState) -> Bool {
+        state != .unavailable && state != .absent
     }
 
     private func logAvailabilityChange(component: StaticString, wasAvailable: Bool, isAvailable: Bool) {

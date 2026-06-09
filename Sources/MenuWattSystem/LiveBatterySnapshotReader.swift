@@ -41,7 +41,10 @@ public struct LiveBatterySnapshotReader {
         let metrics = dependencies.readMetrics()
 
         guard let source = dependencies.readPowerSourceSnapshot() else {
-            return .unavailable
+            // No power source reported. On desktop Macs (Mac mini / Studio / Pro)
+            // there is no internal battery, but the SMC still reports live system
+            // power — surface that instead of a dead "Unavailable" battery.
+            return makeAbsentSnapshot(metrics: metrics)
         }
 
         let maxCapacity = max(source.maxCapacity, 1)
@@ -70,7 +73,7 @@ public struct LiveBatterySnapshotReader {
                 minutes: source.timeToEmpty,
                 context: .remaining
             )
-        case .pluggedIn, .full, .unavailable:
+        case .pluggedIn, .full, .unavailable, .absent:
             timeEstimate = nil
         }
 
@@ -82,6 +85,25 @@ public struct LiveBatterySnapshotReader {
             timeEstimate: timeEstimate,
             rateDetail: makeRateDetail(state: state, metrics: metrics),
             liveInputDetail: makeLiveInputDetail(state: state, metrics: metrics),
+            batteryWatts: metrics?.batteryWatts,
+            adapterWatts: metrics?.adapterWatts,
+            systemInputWatts: metrics?.systemInputWatts,
+            systemLoadWatts: metrics?.systemLoadWatts,
+            cycleCount: metrics?.cycleCount,
+            temperatureCelsius: metrics?.temperatureCelsius,
+            updatedAt: dependencies.now()
+        )
+    }
+
+    private func makeAbsentSnapshot(metrics: SmartBatteryMetrics?) -> BatterySnapshot {
+        BatterySnapshot(
+            name: "System",
+            percentage: 0,
+            state: .absent,
+            sourceDescription: "Power Adapter",
+            timeEstimate: nil,
+            rateDetail: makeRateDetail(state: .absent, metrics: metrics),
+            liveInputDetail: nil,
             batteryWatts: metrics?.batteryWatts,
             adapterWatts: metrics?.adapterWatts,
             systemInputWatts: metrics?.systemInputWatts,
@@ -108,7 +130,7 @@ public struct LiveBatterySnapshotReader {
             if let adapterWatts = metrics.adapterWatts, adapterWatts > 0 {
                 return BatteryPowerDetail(kind: .adapter, watts: adapterWatts)
             }
-        case .onBattery, .pluggedIn, .full:
+        case .onBattery, .pluggedIn, .full, .absent:
             if let detail = usageDetail(from: metrics) {
                 return detail
             }
@@ -180,13 +202,17 @@ struct SmartBatteryMetricsReader {
     private let ioReportReader = IOReportPowerReader()
 
     func read() -> SmartBatteryMetrics? {
+        // SMC power telemetry (PSTR/PDTR) is available on every Mac, including
+        // desktops that have no AppleSmartBattery service.
+        let smc = ioReportReader.read()
+
         guard let entry = matchingService(named: "AppleSmartBattery") else {
-            return nil
+            return makeSMCOnlyMetrics(smc)
         }
         defer { IOObjectRelease(entry) }
 
         guard let properties = properties(for: entry) else {
-            return nil
+            return makeSMCOnlyMetrics(smc)
         }
 
         let amperage = numericValue(for: ["InstantAmperage", "Amperage"], in: properties)
@@ -201,7 +227,6 @@ struct SmartBatteryMetricsReader {
         let systemLoadMilliWatts = number(from: telemetry?["SystemLoad"])?.doubleValue
 
         // SMC-first: PSTR/PDTR are primary, PowerTelemetryData is fallback.
-        let smc = ioReportReader.read()
         let systemLoadWatts = smc.systemPower
             ?? systemLoadMilliWatts.map { $0 / 1000.0 }
         let systemInputWatts = smc.deliveryRate
@@ -217,6 +242,20 @@ struct SmartBatteryMetricsReader {
             systemLoadWatts: systemLoadWatts,
             cycleCount: cycleCount,
             temperatureCelsius: temperatureCelsius
+        )
+    }
+
+    /// Metrics for Macs without an AppleSmartBattery (desktops): only the SMC
+    /// system-power channels are populated; battery-specific fields stay nil.
+    private func makeSMCOnlyMetrics(_ smc: SMCPowerSnapshot) -> SmartBatteryMetrics? {
+        guard smc.systemPower != nil || smc.deliveryRate != nil else { return nil }
+        return SmartBatteryMetrics(
+            batteryWatts: nil,
+            adapterWatts: nil,
+            systemInputWatts: smc.deliveryRate,
+            systemLoadWatts: smc.systemPower,
+            cycleCount: nil,
+            temperatureCelsius: nil
         )
     }
 

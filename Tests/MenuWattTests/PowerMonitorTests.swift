@@ -142,7 +142,7 @@ func stopPreventsFurtherRefreshesAndAnimationTicks() async {
 @Test
 func allBatteryStatesUseTheSameRunningFrames() {
     let expectedFrames = BoochiPresentation.runningFrames
-    let states: [BatteryState] = [.charging, .pluggedIn, .onBattery, .full, .unavailable]
+    let states: [BatteryState] = [.charging, .pluggedIn, .onBattery, .full, .unavailable, .absent]
 
     for state in states {
         let presentation = BoochiPresentation.make(for: state)

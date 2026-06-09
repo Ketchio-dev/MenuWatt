@@ -16,7 +16,7 @@ struct MonitorPanelView: View {
         VStack(spacing: 0) {
             HeroRow(battery: battery, sprite: sprite)
 
-            if visibleSections.contains(.battery) {
+            if visibleSections.contains(.battery) && battery.state != .absent {
                 Divider().padding(.horizontal, 10)
                 BatterySection(snapshot: battery)
             }
@@ -72,21 +72,38 @@ struct HeroRow: View {
                 .interpolation(.none)
                 .frame(width: 28, height: 28)
 
-            Text("\(battery.percentage)%")
-                .font(.system(size: 20, weight: .semibold, design: .monospaced))
-                .monospacedDigit()
-
-            Text(presentation.title)
-                .font(.system(size: 12, weight: .medium))
-                .foregroundStyle(presentation.themeColor)
-
-            Spacer()
-
-            if let powerText = battery.menuBarPowerText {
-                Text(powerText)
-                    .font(.system(size: 14, weight: .medium, design: .monospaced))
-                    .foregroundStyle(.secondary)
+            if battery.state == .absent {
+                // Desktop Mac: no battery percentage — headline the live power draw.
+                if let powerText = battery.menuBarPowerText {
+                    Text(powerText)
+                        .font(.system(size: 20, weight: .semibold, design: .monospaced))
+                        .monospacedDigit()
+                    Text(presentation.title)
+                        .font(.system(size: 12, weight: .medium))
+                        .foregroundStyle(presentation.themeColor)
+                } else {
+                    Text("MenuWatt")
+                        .font(.system(size: 16, weight: .semibold))
+                        .foregroundStyle(.secondary)
+                }
+                Spacer()
+            } else {
+                Text("\(battery.percentage)%")
+                    .font(.system(size: 20, weight: .semibold, design: .monospaced))
                     .monospacedDigit()
+
+                Text(presentation.title)
+                    .font(.system(size: 12, weight: .medium))
+                    .foregroundStyle(presentation.themeColor)
+
+                Spacer()
+
+                if let powerText = battery.menuBarPowerText {
+                    Text(powerText)
+                        .font(.system(size: 14, weight: .medium, design: .monospaced))
+                        .foregroundStyle(.secondary)
+                        .monospacedDigit()
+                }
             }
         }
         .padding(.horizontal, 12)
