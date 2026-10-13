@@ -256,7 +256,7 @@ private final class StartupRuntime {
         defaults = StartupDefaults(suiteName: domain)!
         defaults.setPersistentDomain([
             "menuBarCleanup.enabled": enabled, "menuBarCleanup.hideActivityControls": true,
-            "menuBarCleanup.autoRehide": false,
+            "menuBarCleanup.autoRehide": false, "menuBarCleanup.revealOnHover": false,
             "menuBarCleanup.sections": ["system:5": "hidden", "app:com.example.startup.hidden": "hidden"],
             "unrelated.setting": ["keep": "original"]
         ], forName: domain)

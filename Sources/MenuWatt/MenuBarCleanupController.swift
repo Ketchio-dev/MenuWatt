@@ -13,6 +13,7 @@ final class MenuBarCleanupController: ObservableObject {
                 revealMode = .collapsed
             }
             updateHotKeys()
+            updateHoverMonitor()
             apply()
             scheduleRehide()
         }
@@ -23,6 +24,7 @@ final class MenuBarCleanupController: ObservableObject {
     @Published private(set) var status = "Menu bar cleanup is off."
     @Published private(set) var errorMessage: String?
     @Published private(set) var hotKeysAvailable = false
+    @Published private(set) var hoverRevealed = false
 
     let isSupported: Bool
     private let defaults: UserDefaults
@@ -36,12 +38,16 @@ final class MenuBarCleanupController: ObservableObject {
     private var refreshTask: Task<Void, Never>?
     private let sessionManager: MenuBarCleanupSessionManager
     private let hotKeyManager: MenuBarCleanupHotKeyManager
+    private let hoverMonitor: MenuBarHoverMonitor
+    private var hoverHideTask: Task<Void, Never>?
     private var isStarted = false
     private static let preferencePrefix = "menuBarCleanup."
 
-    init(defaults: UserDefaults = .standard, runtime: MenuBarCleanupRuntime = .live) {
+    init(defaults: UserDefaults = .standard, runtime: MenuBarCleanupRuntime = .live,
+         hoverMonitor: MenuBarHoverMonitor = MenuBarHoverMonitor()) {
         self.defaults = defaults
         self.runtime = runtime
+        self.hoverMonitor = hoverMonitor
         ownBundleID = Bundle.main.bundleIdentifier ?? "com.junsu.menuwatt"
         sessionManager = MenuBarCleanupSessionManager(
             makeSession: runtime.makeSession, activationTimeout: runtime.activationTimeout)
@@ -52,6 +58,7 @@ final class MenuBarCleanupController: ObservableObject {
             enabled: defaults.bool(forKey: Self.preferencePrefix + "enabled"),
             keepActivityControlsHidden: defaults.object(forKey: Self.preferencePrefix + "hideActivityControls") as? Bool ?? true,
             autoRehide: defaults.object(forKey: Self.preferencePrefix + "autoRehide") as? Bool ?? true,
+            revealOnHover: defaults.object(forKey: Self.preferencePrefix + "revealOnHover") as? Bool ?? false,
             sections: rawSections.compactMapValues(MenuBarItemSection.init(rawValue:))
         )
         if !isSupported { status = "Menu bar cleanup requires a supported macOS 27 build." }
@@ -70,6 +77,11 @@ final class MenuBarCleanupController: ObservableObject {
     var autoRehide: Bool {
         get { configuration.autoRehide }
         set { configuration.autoRehide = newValue }
+    }
+
+    var revealOnHover: Bool {
+        get { configuration.revealOnHover }
+        set { configuration.revealOnHover = newValue }
     }
 
     var isExpanded: Bool { revealMode != .collapsed }
@@ -129,6 +141,7 @@ final class MenuBarCleanupController: ObservableObject {
             })
         refresh()
         updateHotKeys()
+        updateHoverMonitor()
     }
 
     func stop() {
@@ -137,8 +150,12 @@ final class MenuBarCleanupController: ObservableObject {
         observers.removeAll()
         refreshTask?.cancel()
         rehideTask?.cancel()
+        hoverHideTask?.cancel()
+        hoverMonitor.stop()
+        hoverRevealed = false
         isSleeping = false
         isPaused = false
+        hoverRevealed = false
         revealMode = .collapsed
         retireHotKeys()
         restoreSession()
@@ -153,6 +170,9 @@ final class MenuBarCleanupController: ObservableObject {
         isPaused = true
         refreshTask?.cancel()
         rehideTask?.cancel()
+        hoverHideTask?.cancel()
+        hoverMonitor.stop()
+        hoverRevealed = false
         revealMode = .collapsed
         restoreSession()
         retireHotKeys()
@@ -165,9 +185,11 @@ final class MenuBarCleanupController: ObservableObject {
     func resumeCleanup() {
         guard isStarted, isSupported, enabled, !isSleeping, isPaused else { return }
         isPaused = false
+        hoverRevealed = false
         revealMode = .collapsed
         retireHotKeys()
         updateHotKeys()
+        updateHoverMonitor()
         refreshTask?.cancel()
         MenuBarCleanupDiagnostics.resumed()
         refresh()
@@ -176,6 +198,7 @@ final class MenuBarCleanupController: ObservableObject {
     func restoreSystemMenuBar() {
         enabled = false
         isPaused = false
+        hoverRevealed = false
         // Also releases a session if restore is invoked while already disabled.
         restoreSession()
         errorMessage = nil
@@ -185,6 +208,8 @@ final class MenuBarCleanupController: ObservableObject {
 
     func toggleHiddenItems() {
         guard canRevealItems else { return }
+        hoverHideTask?.cancel()
+        hoverRevealed = false
         revealMode = isExpanded ? .collapsed : .hidden
         refresh()
         scheduleRehide()
@@ -192,6 +217,8 @@ final class MenuBarCleanupController: ObservableObject {
 
     func showAllItems() {
         guard canRevealItems else { return }
+        hoverHideTask?.cancel()
+        hoverRevealed = false
         revealMode = .all
         refresh()
         scheduleRehide()
@@ -211,6 +238,8 @@ final class MenuBarCleanupController: ObservableObject {
         guard isStarted else { return }
         isSleeping = true
         retireHotKeys()
+        hoverMonitor.stop()
+        hoverRevealed = false
         refreshTask?.cancel()
         rehideTask?.cancel()
         revealMode = .collapsed
@@ -223,6 +252,7 @@ final class MenuBarCleanupController: ObservableObject {
         guard isStarted else { return }
         isSleeping = false
         updateHotKeys()
+        updateHoverMonitor()
         rehideTask?.cancel()
         revealMode = .collapsed
         queueRefresh(force: true)
@@ -248,6 +278,7 @@ final class MenuBarCleanupController: ObservableObject {
         defaults.set(configuration.enabled, forKey: Self.preferencePrefix + "enabled")
         defaults.set(configuration.keepActivityControlsHidden, forKey: Self.preferencePrefix + "hideActivityControls")
         defaults.set(configuration.autoRehide, forKey: Self.preferencePrefix + "autoRehide")
+        defaults.set(configuration.revealOnHover, forKey: Self.preferencePrefix + "revealOnHover")
         defaults.set(configuration.sections.mapValues(\.rawValue), forKey: Self.preferencePrefix + "sections")
     }
 
@@ -331,6 +362,49 @@ final class MenuBarCleanupController: ObservableObject {
         rehideTask = Task { [weak self] in
             try? await Task.sleep(for: delay)
             guard !Task.isCancelled, let self, self.canRevealItems else { return }
+            self.hoverRevealed = false
+            self.revealMode = .collapsed
+            self.apply()
+        }
+    }
+
+    // MARK: - Hover reveal
+
+    private func updateHoverMonitor() {
+        hoverHideTask?.cancel()
+        guard isStarted, isSupported, enabled, revealOnHover, !isSleeping, !isPaused else {
+            hoverMonitor.stop()
+            // Leaving hover mode collapses what hover opened, like pause does.
+            if hoverRevealed {
+                hoverRevealed = false
+                revealMode = .collapsed
+                apply()
+            }
+            return
+        }
+        hoverMonitor.start(onEnter: { [weak self] in self?.hoverDidEnter() },
+                           onExit: { [weak self] in self?.hoverDidExit() })
+    }
+
+    private func hoverDidEnter() {
+        hoverHideTask?.cancel()
+        guard canRevealItems, configuration.revealOnHover else { return }
+        guard !isExpanded else { return }
+        hoverRevealed = true
+        revealMode = .hidden
+        refresh()
+    }
+
+    private func hoverDidExit() {
+        hoverHideTask?.cancel()
+        // Only collapse what hover opened; a manual reveal stays until its
+        // own timer or toggle. A short grace period absorbs edge flicker.
+        guard hoverRevealed, isExpanded else { return }
+        hoverHideTask = Task { [weak self] in
+            try? await Task.sleep(for: .seconds(1))
+            guard !Task.isCancelled, let self,
+                  self.hoverRevealed, self.canRevealItems else { return }
+            self.hoverRevealed = false
             self.revealMode = .collapsed
             self.apply()
         }

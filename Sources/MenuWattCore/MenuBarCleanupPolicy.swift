@@ -20,13 +20,16 @@ public struct MenuBarCleanupConfiguration: Equatable, Sendable {
     public var enabled: Bool
     public var keepActivityControlsHidden: Bool
     public var autoRehide: Bool
+    public var revealOnHover: Bool
     public var sections: [String: MenuBarItemSection]
 
     public init(enabled: Bool = false, keepActivityControlsHidden: Bool = true,
-                autoRehide: Bool = true, sections: [String: MenuBarItemSection] = [:]) {
+                autoRehide: Bool = true, revealOnHover: Bool = false,
+                sections: [String: MenuBarItemSection] = [:]) {
         self.enabled = enabled
         self.keepActivityControlsHidden = keepActivityControlsHidden
         self.autoRehide = autoRehide
+        self.revealOnHover = revealOnHover
         self.sections = sections
     }
 }
