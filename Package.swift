@@ -20,12 +20,17 @@ let package = Package(
             name: "CIOReport"
         ),
         .target(
+            name: "CMenuBar",
+            cSettings: [.unsafeFlags(["-fobjc-arc"])],
+            linkerSettings: [.linkedFramework("Foundation"), .linkedFramework("Carbon")]
+        ),
+        .target(
             name: "MenuWattSystem",
             dependencies: ["MenuWattCore", "CIOReport"]
         ),
         .executableTarget(
             name: "MenuWatt",
-            dependencies: ["MenuWattCore", "MenuWattSystem"]
+            dependencies: ["MenuWattCore", "MenuWattSystem", "CMenuBar"]
         ),
         .testTarget(
             name: "MenuWattTests",

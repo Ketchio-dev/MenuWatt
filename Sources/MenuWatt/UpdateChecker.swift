@@ -23,6 +23,7 @@ final class UpdateChecker: ObservableObject {
     private let endpoint = URL(string: "https://api.github.com/repos/Ketchio-dev/MenuWatt/releases/latest")!
     private let logger = MenuWattDiagnostics.preferences
     private let session: URLSession
+    private var inFlightCheck: Task<ReleaseInfo?, Never>?
 
     init(session: URLSession = .shared) {
         self.session = session
@@ -33,8 +34,16 @@ final class UpdateChecker: ObservableObject {
     }
 
     func check() async -> ReleaseInfo? {
+        if let inFlightCheck { return await inFlightCheck.value }
         status = .checking
+        let task = Task { await performCheck() }
+        inFlightCheck = task
+        let result = await task.value
+        inFlightCheck = nil
+        return result
+    }
 
+    private func performCheck() async -> ReleaseInfo? {
         var request = URLRequest(url: endpoint)
         request.setValue("application/vnd.github+json", forHTTPHeaderField: "Accept")
         request.timeoutInterval = 15

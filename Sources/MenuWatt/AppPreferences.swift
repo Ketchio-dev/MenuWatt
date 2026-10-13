@@ -1,138 +1,6 @@
 import Foundation
 import MenuWattCore
 
-protocol LaunchAtLoginControlling {
-    var isEnabled: Bool { get }
-    func setEnabled(_ enabled: Bool) throws
-    func refreshConfigurationIfNeeded() throws
-}
-
-extension LaunchAtLoginControlling {
-    func refreshConfigurationIfNeeded() throws {}
-}
-
-/// Uses a per-user LaunchAgent plist for direct-distributed builds.
-/// This keeps launch-at-login working without requiring an embedded helper app.
-struct LaunchAgentController: LaunchAtLoginControlling {
-    struct Environment: Sendable {
-        let plistURL: URL
-        let currentExecutablePath: @Sendable () -> String
-        let currentBundlePath: @Sendable () -> String
-        let installedAppBundleURL: @Sendable () -> URL?
-
-        static let live = Environment(
-            plistURL: FileManager.default.homeDirectoryForCurrentUser
-                .appendingPathComponent("Library/LaunchAgents/\(Constants.label).plist"),
-            currentExecutablePath: {
-                Bundle.main.executablePath ?? ProcessInfo.processInfo.arguments.first ?? ""
-            },
-            currentBundlePath: {
-                Bundle.main.bundlePath
-            },
-            installedAppBundleURL: {
-                let appURL = URL(fileURLWithPath: "/Applications/MenuWatt.app")
-                guard
-                    let bundle = Bundle(url: appURL),
-                    bundle.bundleIdentifier == Constants.bundleIdentifier
-                else {
-                    return nil
-                }
-
-                return appURL
-            }
-        )
-    }
-
-    private enum Constants {
-        static let label = "com.menuwatt.launcher"
-        static let bundleIdentifier = "com.junsu.menuwatt"
-        static let openCommand = "/usr/bin/open"
-    }
-
-    private let environment: Environment
-
-    init(environment: Environment = .live) {
-        self.environment = environment
-    }
-
-    private var plistURL: URL {
-        environment.plistURL
-    }
-
-    private var currentRegisteredProgramArguments: [String]? {
-        guard
-            let data = try? Data(contentsOf: plistURL),
-            let plist = try? PropertyListSerialization.propertyList(from: data, format: nil) as? [String: Any],
-            let arguments = plist["ProgramArguments"] as? [String],
-            !arguments.isEmpty
-        else {
-            return nil
-        }
-
-        return arguments
-    }
-
-    private var installedAppBundlePath: String? {
-        environment.installedAppBundleURL()?.path
-    }
-
-    private func shouldPreferInstalledApp(for path: String) -> Bool {
-        path.contains("/DerivedData/") || path.contains("/.build")
-    }
-
-    private var appBundlePath: String {
-        let currentExecutablePath = environment.currentExecutablePath()
-
-        if shouldPreferInstalledApp(for: currentExecutablePath), let installedAppBundlePath {
-            return installedAppBundlePath
-        }
-
-        return environment.currentBundlePath()
-    }
-
-    private var programArguments: [String] {
-        [Constants.openCommand, "-a", appBundlePath]
-    }
-
-    var isEnabled: Bool {
-        FileManager.default.fileExists(atPath: plistURL.path)
-    }
-
-    func refreshConfigurationIfNeeded() throws {
-        guard isEnabled else { return }
-
-        let desiredProgramArguments = programArguments
-        let registeredProgramArguments = currentRegisteredProgramArguments
-
-        guard registeredProgramArguments != desiredProgramArguments else { return }
-
-        try setEnabled(true)
-    }
-
-    func setEnabled(_ enabled: Bool) throws {
-        if enabled {
-            let plist: [String: Any] = [
-                "Label": Constants.label,
-                "ProgramArguments": programArguments,
-                "RunAtLoad": true,
-                "KeepAlive": false,
-            ]
-            let dir = plistURL.deletingLastPathComponent()
-            try FileManager.default.createDirectory(at: dir, withIntermediateDirectories: true)
-            let data = try PropertyListSerialization.data(
-                fromPropertyList: plist,
-                format: .xml,
-                options: 0
-            )
-            try data.write(to: plistURL, options: .atomic)
-        } else {
-            if FileManager.default.fileExists(atPath: plistURL.path) {
-                try FileManager.default.removeItem(at: plistURL)
-            }
-        }
-    }
-}
-
 enum MenuBarIndicator: String, CaseIterable, Identifiable, Sendable {
     case power
     case battery
@@ -220,6 +88,7 @@ final class AppPreferences: ObservableObject {
         static let menuBarIndicator = "menuBarIndicator"
         static let refreshInterval = "refreshIntervalSeconds"
         static let showsSprite = "showsSprite"
+        static let showsGraphs = "showsGraphs"
         static let notifyChargeComplete = "notifyChargeComplete"
         static let notifyLowBattery = "notifyLowBattery"
         static let lowBatteryThreshold = "lowBatteryThreshold"
@@ -251,6 +120,12 @@ final class AppPreferences: ObservableObject {
         didSet {
             guard oldValue != showsSprite else { return }
             defaults.set(showsSprite, forKey: Keys.showsSprite)
+        }
+    }
+    @Published var showsGraphs: Bool {
+        didSet {
+            guard oldValue != showsGraphs else { return }
+            defaults.set(showsGraphs, forKey: Keys.showsGraphs)
         }
     }
     @Published var notifyChargeComplete: Bool {
@@ -338,6 +213,10 @@ final class AppPreferences: ObservableObject {
         } else {
             self.showsSprite = defaults.bool(forKey: Keys.showsSprite)
         }
+
+        self.showsGraphs = defaults.object(forKey: Keys.showsGraphs) == nil
+            ? true
+            : defaults.bool(forKey: Keys.showsGraphs)
 
         self.notifyChargeComplete = defaults.object(forKey: Keys.notifyChargeComplete) == nil
             ? false

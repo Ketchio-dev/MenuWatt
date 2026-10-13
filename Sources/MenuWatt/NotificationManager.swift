@@ -1,9 +1,10 @@
+import AppKit
 import Foundation
 import UserNotifications
 import MenuWattCore
 
 @MainActor
-final class NotificationManager {
+final class NotificationManager: NSObject, UNUserNotificationCenterDelegate {
     enum Kind: String {
         case chargeComplete = "menuwatt.charge.complete"
         case lowBattery = "menuwatt.battery.low"
@@ -18,7 +19,26 @@ final class NotificationManager {
     private var lastFiredAt: [Kind: Date] = [:]
     private let coalescingInterval: TimeInterval = 5 * 60
 
-    private init() {}
+    private override init() {
+        super.init()
+        center.delegate = self
+    }
+
+    nonisolated func userNotificationCenter(_ center: UNUserNotificationCenter,
+        willPresent notification: UNNotification,
+        withCompletionHandler completionHandler: @escaping (UNNotificationPresentationOptions) -> Void) {
+        completionHandler(NotificationInteraction.presentationOptions)
+    }
+
+    nonisolated func userNotificationCenter(_ center: UNUserNotificationCenter,
+        didReceive response: UNNotificationResponse,
+        withCompletionHandler completionHandler: @escaping () -> Void) {
+        if response.actionIdentifier == UNNotificationDefaultActionIdentifier,
+           let url = NotificationInteraction.releaseURL(from: response.notification.request.content.userInfo) {
+            Task { @MainActor in NSWorkspace.shared.open(url) }
+        }
+        completionHandler()
+    }
 
     func requestAuthorizationIfNeeded() {
         Task { @MainActor in
@@ -58,5 +78,18 @@ final class NotificationManager {
         }
 
         lastFiredAt[kind] = Date()
+    }
+}
+
+/// Foreground presentation and the update alert's existing link payload.
+enum NotificationInteraction {
+    static var presentationOptions: UNNotificationPresentationOptions { [.banner, .list, .sound] }
+
+    static func releaseURL(from userInfo: [AnyHashable: Any]) -> URL? {
+        guard let raw = userInfo["url"] as? String, let url = URL(string: raw),
+              url.scheme == "https", url.host == "github.com", url.user == nil, url.password == nil,
+              url.path == "/Ketchio-dev/MenuWatt/releases"
+                || url.path.hasPrefix("/Ketchio-dev/MenuWatt/releases/") else { return nil }
+        return url
     }
 }

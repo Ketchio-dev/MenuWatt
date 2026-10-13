@@ -66,7 +66,9 @@ struct BoochiPresentation {
     static func tooltip(for snapshot: BatterySnapshot) -> String {
         let title = make(for: snapshot.state).title
         let headline: String
-        if snapshot.state == .absent {
+        if snapshot.state == .unavailable {
+            headline = title
+        } else if snapshot.state == .absent {
             // No battery — lead with the live power draw instead of "0%".
             headline = snapshot.menuBarPowerText.map { "\(title) \($0)" } ?? title
         } else {

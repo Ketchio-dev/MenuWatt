@@ -4,8 +4,18 @@ set -euo pipefail
 
 ROOT_DIR="$(cd "$(dirname "$0")/.." && pwd)"
 APP_NAME="MenuWatt"
-ARTIFACT_DIR="$ROOT_DIR/.build-app"
-DERIVED_DATA_DIR="$ROOT_DIR/.build-app-derived"
+BUILD_CONFIGURATION="Release"
+BUILD_SUFFIX=""
+if [[ "${1:-}" == "--preview" ]]; then
+  APP_NAME="MenuWattPreview"
+  BUILD_CONFIGURATION="CleanupPreview"
+  BUILD_SUFFIX="-preview"
+elif [[ -n "${1:-}" ]]; then
+  echo "Usage: ./scripts/build-app.sh [--preview]" >&2
+  exit 1
+fi
+ARTIFACT_DIR="$ROOT_DIR/.build-app${BUILD_SUFFIX}"
+DERIVED_DATA_DIR="$ROOT_DIR/.build-app-derived${BUILD_SUFFIX}"
 BUILD_LOG="$ARTIFACT_DIR/xcodebuild.log"
 XCODEGEN_LOG="$ARTIFACT_DIR/xcodegen.log"
 SOURCE_PACKAGES_DIR="$ROOT_DIR/.build-xcode-packages"
@@ -128,8 +138,8 @@ generate_xcode_project
 echo "Building $APP_NAME with Xcode..."
 if ! xcodebuild \
   -project "$ROOT_DIR/MenuWatt.xcodeproj" \
-  -scheme "$APP_NAME" \
-  -configuration Release \
+  -scheme MenuWatt \
+  -configuration "$BUILD_CONFIGURATION" \
   -derivedDataPath "$DERIVED_DATA_DIR" \
   -clonedSourcePackagesDirPath "$SOURCE_PACKAGES_DIR" \
   build >"$BUILD_LOG" 2>&1; then
@@ -143,7 +153,7 @@ if ! xcodebuild \
   exit 1
 fi
 
-APP_BUILD_DIR="$DERIVED_DATA_DIR/Build/Products/Release"
+APP_BUILD_DIR="$DERIVED_DATA_DIR/Build/Products/$BUILD_CONFIGURATION"
 SOURCE_APP_DIR="$APP_BUILD_DIR/${APP_NAME}.app"
 APP_DIR="$ARTIFACT_DIR/${APP_NAME}.app"
 

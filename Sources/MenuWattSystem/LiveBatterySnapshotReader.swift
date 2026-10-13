@@ -19,6 +19,7 @@ public struct LiveBatterySnapshotReader {
         let readPowerSourceSnapshot: @Sendable () -> PowerSourceSnapshot?
         let readMetrics: @Sendable () -> SmartBatteryMetrics?
         let now: @Sendable () -> Date
+        var hasInternalBattery: @Sendable () -> Bool = { HostCapabilities.hasInternalBattery }
 
         static let live = Dependencies(
             readPowerSourceSnapshot: LiveBatteryPowerSourceReader.read,
@@ -41,10 +42,11 @@ public struct LiveBatterySnapshotReader {
         let metrics = dependencies.readMetrics()
 
         guard let source = dependencies.readPowerSourceSnapshot() else {
-            // No power source reported. On desktop Macs (Mac mini / Studio / Pro)
-            // there is no internal battery, but the SMC still reports live system
-            // power — surface that instead of a dead "Unavailable" battery.
-            return makeAbsentSnapshot(metrics: metrics)
+            // A transient power-source failure on a notebook is not proof that
+            // the battery disappeared. Desktop Macs still expose SMC power.
+            return dependencies.hasInternalBattery()
+                ? makeUnavailableSnapshot(metrics: metrics)
+                : makeAbsentSnapshot(metrics: metrics)
         }
 
         let maxCapacity = max(source.maxCapacity, 1)
@@ -93,6 +95,14 @@ public struct LiveBatterySnapshotReader {
             temperatureCelsius: metrics?.temperatureCelsius,
             updatedAt: dependencies.now()
         )
+    }
+
+    private func makeUnavailableSnapshot(metrics: SmartBatteryMetrics?) -> BatterySnapshot {
+        BatterySnapshot(name: "Battery", percentage: 0, state: .unavailable,
+            sourceDescription: "Unknown", timeEstimate: nil, rateDetail: nil, liveInputDetail: nil,
+            batteryWatts: nil, adapterWatts: nil, systemInputWatts: metrics?.systemInputWatts,
+            systemLoadWatts: metrics?.systemLoadWatts, cycleCount: metrics?.cycleCount,
+            temperatureCelsius: metrics?.temperatureCelsius, updatedAt: dependencies.now())
     }
 
     private func makeAbsentSnapshot(metrics: SmartBatteryMetrics?) -> BatterySnapshot {

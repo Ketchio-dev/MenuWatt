@@ -63,7 +63,8 @@ func batteryReaderReportsAbsentWithSystemPowerWhenNoPowerSource() {
                     temperatureCelsius: nil
                 )
             },
-            now: { Date(timeIntervalSince1970: 1234) }
+            now: { Date(timeIntervalSince1970: 1234) },
+            hasInternalBattery: { false }
         )
     )
 
@@ -76,12 +77,27 @@ func batteryReaderReportsAbsentWithSystemPowerWhenNoPowerSource() {
 }
 
 @Test
+func notebookPowerSourceFailureReportsUnavailableNotDesktop() {
+    let reader = LiveBatterySnapshotReader(dependencies: .init(
+        readPowerSourceSnapshot: { nil },
+        readMetrics: { .init(batteryWatts: nil, adapterWatts: nil, systemInputWatts: 25,
+            systemLoadWatts: 18, cycleCount: nil, temperatureCelsius: nil) },
+        now: { Date(timeIntervalSince1970: 1234) }, hasInternalBattery: { true }))
+    let snapshot = reader.read()
+    #expect(snapshot.state == .unavailable)
+    #expect(snapshot.sourceDescription == "Unknown")
+    #expect(snapshot.systemLoadWatts == 18)
+    #expect(snapshot.updatedAt == Date(timeIntervalSince1970: 1234))
+}
+
+@Test
 func batteryReaderReportsAbsentWithoutPowerTextWhenNoMetrics() {
     let reader = LiveBatterySnapshotReader(
         dependencies: .init(
             readPowerSourceSnapshot: { nil },
             readMetrics: { nil },
-            now: Date.init
+            now: Date.init,
+            hasInternalBattery: { false }
         )
     )
 

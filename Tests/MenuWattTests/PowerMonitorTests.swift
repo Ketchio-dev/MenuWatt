@@ -96,6 +96,24 @@ func startIsIdempotent() async {
 }
 
 @Test
+func shorterRefreshIntervalTakesEffectWithoutWaitingForOldSleep() async throws {
+    let sampler = TestSampler(responses: [.steadyState])
+    let monitor = await MainActor.run {
+        PowerMonitor(sampler: sampler, configuration: .init(refreshInterval: 60, animationMinimumInterval: 0.02))
+    }
+    await MainActor.run { monitor.start() }
+    try await Task.sleep(for: .milliseconds(30))
+    #expect(await sampler.count() == 1)
+    await MainActor.run { monitor.setRefreshInterval(0.02) }
+    try await Task.sleep(for: .milliseconds(100))
+    #expect(await sampler.count() >= 3)
+    await MainActor.run { monitor.stop() }
+    let stoppedCount = await sampler.count()
+    try await Task.sleep(for: .milliseconds(60))
+    #expect(await sampler.count() == stoppedCount)
+}
+
+@Test
 func stopPreventsFurtherRefreshesAndAnimationTicks() async {
     let payload = SamplePayload(
         battery: makeBatterySnapshot(percentage: 80, state: .charging),

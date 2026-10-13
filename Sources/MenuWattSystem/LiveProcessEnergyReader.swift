@@ -35,7 +35,7 @@ public final class LiveProcessEnergyReader {
 
         static let live = Readers(
             listProcesses: ProcessReaders.listProcesses,
-            clock: { Date().timeIntervalSince1970 }
+            clock: { ProcessInfo.processInfo.systemUptime }
         )
     }
 
