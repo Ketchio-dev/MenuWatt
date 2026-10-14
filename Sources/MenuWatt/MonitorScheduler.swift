@@ -104,20 +104,25 @@ final class MonitorSpriteAnimator {
         currentFrame = SpriteRenderer.image(for: initial)
     }
 
-    func start(tick: @escaping @MainActor () -> (state: BatteryState, cpuUsage: Double)) {
+    func start(
+        tick: @escaping @MainActor () -> (state: BatteryState, cpuUsage: Double),
+        onFrameChange: @escaping @MainActor () -> Void
+    ) {
         guard loopTask == nil else { return }
+        let minimumInterval = minimumInterval
         loopTask = Task { [weak self] in
             while !Task.isCancelled {
-                guard let self else { return }
-                let reading = await MainActor.run { tick() }
+                guard self != nil else { return }
+                let reading = tick()
                 let interval = BoochiAnimationPolicy.interval(
                     for: reading.state,
                     cpuUsage: reading.cpuUsage,
-                    minimumInterval: self.minimumInterval
+                    minimumInterval: minimumInterval
                 )
                 try? await Task.sleep(nanoseconds: UInt64(max(interval, 0.001) * 1_000_000_000))
-                guard !Task.isCancelled else { return }
-                await MainActor.run { self.advance(state: reading.state) }
+                guard !Task.isCancelled, let self else { return }
+                self.advance(state: tick().state)
+                onFrameChange()
             }
         }
     }

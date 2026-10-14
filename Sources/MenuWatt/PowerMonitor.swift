@@ -67,10 +67,15 @@ final class PowerMonitor: ObservableObject {
             requestImmediate: { [weak self] in self?.requestRefresh(resetAnimation: true) },
             requestTick: { [weak self] in self?.requestRefresh(resetAnimation: false) }
         )
-        animator.start { [weak self] in
-            guard let self else { return (state: .unavailable, cpuUsage: 0) }
-            return (state: self.snapshot.state, cpuUsage: self.systemSnapshot.cpu.totalUsage)
-        }
+        animator.start(
+            tick: { [weak self] in
+                guard let self else { return (state: .unavailable, cpuUsage: 0) }
+                return (state: self.snapshot.state, cpuUsage: self.systemSnapshot.cpu.totalUsage)
+            },
+            onFrameChange: { [weak self] in
+                self?.publishAnimationFrame()
+            }
+        )
     }
 
     func stop() {
@@ -115,6 +120,10 @@ final class PowerMonitor: ObservableObject {
         }
 
         animator.refresh(state: nextSnapshot.state)
+        publishAnimationFrame()
+    }
+
+    private func publishAnimationFrame() {
         currentSpriteFrame = animator.currentSpriteFrame
         currentFrame = animator.currentFrame
     }
