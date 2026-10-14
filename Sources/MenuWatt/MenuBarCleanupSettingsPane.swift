@@ -52,7 +52,7 @@ struct MenuBarCleanupSettingsPane: View {
                     SettingsRow(label: "Collapse after 15 seconds", detail: "Applies to temporarily revealed icons, not Pause.") {
                         Toggle("Collapse after 15 seconds", isOn: $cleanup.autoRehide).labelsHidden()
                     }
-                    SettingsRow(label: "Reveal on hover", detail: "Moving the cursor to the menu bar reveals Hidden icons; leaving collapses them after a second. No extra permissions needed.") {
+                    SettingsRow(label: "Reveal on hover", detail: "Hover over a visible menu bar to reveal Hidden icons. They collapse a second after leaving; open menus, attached popups and drags delay collapse. No extra permissions needed.") {
                         Toggle("Reveal on hover", isOn: $cleanup.revealOnHover).labelsHidden()
                     }
                 }

@@ -55,6 +55,17 @@ control their order. Sleep releases the visibility session; wake reapplies a
 fresh, collapsed layout without changing saved assignments, unless you paused
 cleanup manually.
 
+**Reveal on hover** is optional and off by default. It uses the actual visible
+menu bar bounds on each screen, including taller bars on notched displays.
+A hidden bar or full-screen edge does not trigger it until macOS shows the bar.
+Hover reveals Hidden icons, never Always Hidden; leaving collapses them after
+a one-second grace period. Native menus, menu-bar-attached floating/modal
+popups and mouse-button drags defer automatic collapse. Custom app panels at
+other window levels may not be detected; turn off automatic collapse or use a
+manual reveal if needed. Pointer position and window bounds/levels are polled
+locally, without images, window titles, input interception or extra permissions.
+Manual Show Hidden/Show All takes over from hover and retains its own timer.
+
 **Keep large microphone / camera controls hidden** stays enabled by default, so
 revealing app icons does not bring the large activity pill back. This changes
 the menu bar's presentation, not audio playback, microphone permissions or

@@ -11,16 +11,37 @@ private final class HoverTestSession: MenuBarCleanupSession {
 }
 
 @MainActor
+private final class HoverSnapshotBox {
+    var value = MenuBarHoverSnapshot(
+        location: NSPoint(x: 720, y: 450),
+        screenFrames: [NSRect(x: 0, y: 0, width: 1440, height: 900)],
+        windows: [.init(frame: NSRect(x: 0, y: 876, width: 1440, height: 24),
+                        level: NSWindow.Level.mainMenu.rawValue)]
+    )
+}
+
+@MainActor
 private final class HoverTestRuntime {
     let domain = "MenuWatt.HoverTests.\(UUID().uuidString)"
     let defaults: UserDefaults
     let workspace = NotificationCenter()
     let application = NotificationCenter()
     let monitor: MenuBarHoverMonitor
-    private let locationBox: NSBox
+    private let snapshotBox: HoverSnapshotBox
     var mouseLocation: NSPoint {
-        get { locationBox.frame.origin }
-        set { locationBox.setFrameOrigin(newValue) }
+        get { snapshotBox.value.location }
+        set { snapshotBox.value.location = newValue }
+    }
+    var menuOpen: Bool {
+        get { snapshotBox.value.windows.contains { $0.level == NSWindow.Level.popUpMenu.rawValue } }
+        set {
+            snapshotBox.value.windows.removeAll { $0.level == NSWindow.Level.popUpMenu.rawValue }
+            if newValue {
+                snapshotBox.value.windows.append(.init(
+                    frame: NSRect(x: 680, y: 600, width: 220, height: 276),
+                    level: NSWindow.Level.popUpMenu.rawValue))
+            }
+        }
     }
     var sessions: [HoverTestSession] = []
     var plans: [MenuBarVisibilityPlan] = []
@@ -29,21 +50,13 @@ private final class HoverTestRuntime {
 
     init() {
         defaults = UserDefaults(suiteName: domain)!
-        // Deterministic geometry: one 1440x900 screen, menu bar strip on top.
-        let frame = NSRect(x: 0, y: 0, width: 1440, height: 900)
-        // Box indirection: the closure cannot capture self before init completes.
-        let locationBox = NSBox()
-        locationBox.setFrameOrigin(NSPoint(x: 720, y: 450))
-        // The poll loop reads this var, so testFeed and polling agree.
-        monitor = MenuBarHoverMonitor(
-            pollInterval: .milliseconds(10),
-            locationProvider: { locationBox.frame.origin },
-            screensProvider: { [frame] }
-        )
-        self.locationBox = locationBox
+        let box = HoverSnapshotBox()
+        snapshotBox = box
+        monitor = MenuBarHoverMonitor(pollInterval: .milliseconds(10),
+                                      snapshotProvider: { box.value })
     }
 
-    func controller() -> MenuBarCleanupController {
+    func controller(rehide: Duration = .seconds(30)) -> MenuBarCleanupController {
         MenuBarCleanupController(defaults: defaults, runtime: .init(
             isSupported: true,
             makeSession: { [self] plan, completion in
@@ -57,7 +70,7 @@ private final class HoverTestRuntime {
             runningApps: { [self] in apps },
             workspaceNotifications: workspace, applicationNotifications: application,
             refreshDelay: .milliseconds(10), activationTimeout: .seconds(2),
-            rehideDelay: .seconds(30)
+            rehideDelay: rehide
         ), hoverMonitor: monitor)
     }
 
@@ -66,7 +79,7 @@ private final class HoverTestRuntime {
 
     func feed(_ point: NSPoint) {
         mouseLocation = point
-        monitor.testFeed(point)
+        monitor.check()
     }
 
     func cleanup(_ controller: MenuBarCleanupController) {
@@ -185,4 +198,115 @@ func hoverRevealRespectsPauseStopAndToggle() {
     fake.feed(fake.inside())
     #expect(!controller.isExpanded)
     controller.stop()
+}
+
+@Test @MainActor
+func hoverKeepsIconsRevealedThroughoutNativeMenuInteraction() async throws {
+    let fake = HoverTestRuntime()
+    let controller = fake.controller()
+    defer { fake.cleanup(controller) }
+    controller.revealOnHover = true
+    controller.enabled = true
+    controller.start()
+    fake.feed(fake.inside())
+    fake.menuOpen = true
+    fake.feed(fake.outside())
+    try await Task.sleep(for: .milliseconds(1200))
+    #expect(controller.hoverRevealed)
+    #expect(controller.isExpanded)
+    fake.menuOpen = false
+    fake.monitor.check()
+    try await Task.sleep(for: .milliseconds(1200))
+    #expect(!controller.isExpanded)
+}
+
+@Test @MainActor
+func menuOpenedDuringExitGraceDefersHoverCollapse() async throws {
+    let fake = HoverTestRuntime()
+    let controller = fake.controller()
+    defer { fake.cleanup(controller) }
+    controller.revealOnHover = true
+    controller.enabled = true
+    controller.start()
+    fake.feed(fake.inside())
+    fake.feed(fake.outside())
+    fake.menuOpen = true // Opens after exit; no second enter transition is required.
+    try await Task.sleep(for: .milliseconds(1200))
+    #expect(controller.isExpanded)
+    fake.menuOpen = false
+    try await Task.sleep(for: .milliseconds(1200))
+    #expect(!controller.isExpanded)
+}
+
+@Test @MainActor
+func hoverGraceSurvivesUnrelatedConfigurationChangesWithoutCompetingRehideTimer() async throws {
+    let fake = HoverTestRuntime()
+    let controller = fake.controller(rehide: .milliseconds(30))
+    defer { fake.cleanup(controller) }
+    controller.setSection(.alwaysHidden, for: "system:5")
+    controller.revealOnHover = true
+    controller.enabled = true
+    controller.start()
+    fake.feed(fake.inside())
+    #expect(!fake.plans.last!.allowedSystemItems.contains(5)) // Hover never reveals Always Hidden.
+    controller.setSection(.hidden, for: "system:0")
+    try await Task.sleep(for: .milliseconds(100))
+    #expect(controller.hoverRevealed)
+    #expect(controller.isExpanded) // No 15s timer (30ms in this fixture) takes over.
+    fake.feed(fake.outside())
+    controller.keepActivityControlsHidden = false
+    try await Task.sleep(for: .milliseconds(1200))
+    #expect(!controller.isExpanded) // Editing a choice does not cancel the pending exit.
+}
+
+@Test @MainActor
+func manualAutoCollapseWaitsUntilMenuInteractionEndsEvenWithHoverOff() async throws {
+    let fake = HoverTestRuntime()
+    let controller = fake.controller(rehide: .milliseconds(30))
+    defer { fake.cleanup(controller) }
+    controller.enabled = true
+    controller.start()
+    controller.showAllItems()
+    fake.menuOpen = true
+    try await Task.sleep(for: .milliseconds(100))
+    #expect(controller.isExpanded)
+    fake.menuOpen = false
+    try await Task.sleep(for: .milliseconds(100))
+    #expect(!controller.isExpanded)
+}
+
+@Test @MainActor
+func hoverExitWorkCannotCrossPauseSleepOrStopRestart() async throws {
+    let fake = HoverTestRuntime()
+    let controller = fake.controller()
+    defer { fake.cleanup(controller) }
+    controller.revealOnHover = true
+    controller.enabled = true
+    controller.start()
+    fake.feed(fake.inside())
+    fake.feed(fake.outside())
+    controller.pauseCleanup()
+    controller.resumeCleanup()
+    fake.feed(fake.inside())
+    try await Task.sleep(for: .milliseconds(1200))
+    #expect(controller.isExpanded)
+
+    fake.feed(fake.outside())
+    fake.workspace.post(name: NSWorkspace.willSleepNotification, object: nil)
+    try await Task.sleep(for: .milliseconds(30))
+    #expect(!controller.isExpanded)
+    #expect(!fake.monitor.running)
+    fake.workspace.post(name: NSWorkspace.didWakeNotification, object: nil)
+    try await Task.sleep(for: .milliseconds(60))
+    fake.feed(fake.inside())
+    try await Task.sleep(for: .milliseconds(1200))
+    #expect(controller.hoverRevealed)
+
+    fake.feed(fake.outside())
+    controller.stop()
+    controller.start()
+    fake.feed(fake.inside())
+    try await Task.sleep(for: .milliseconds(1200))
+    #expect(controller.hoverRevealed)
+    #expect(controller.isExpanded)
 }

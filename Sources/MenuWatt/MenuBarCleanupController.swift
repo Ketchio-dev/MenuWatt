@@ -44,10 +44,10 @@ final class MenuBarCleanupController: ObservableObject {
     private static let preferencePrefix = "menuBarCleanup."
 
     init(defaults: UserDefaults = .standard, runtime: MenuBarCleanupRuntime = .live,
-         hoverMonitor: MenuBarHoverMonitor = MenuBarHoverMonitor()) {
+         hoverMonitor: MenuBarHoverMonitor? = nil) {
         self.defaults = defaults
         self.runtime = runtime
-        self.hoverMonitor = hoverMonitor
+        self.hoverMonitor = hoverMonitor ?? MenuBarHoverMonitor(snapshotProvider: runtime.hoverSnapshot)
         ownBundleID = Bundle.main.bundleIdentifier ?? "com.junsu.menuwatt"
         sessionManager = MenuBarCleanupSessionManager(
             makeSession: runtime.makeSession, activationTimeout: runtime.activationTimeout)
@@ -155,7 +155,6 @@ final class MenuBarCleanupController: ObservableObject {
         hoverRevealed = false
         isSleeping = false
         isPaused = false
-        hoverRevealed = false
         revealMode = .collapsed
         retireHotKeys()
         restoreSession()
@@ -239,6 +238,7 @@ final class MenuBarCleanupController: ObservableObject {
         isSleeping = true
         retireHotKeys()
         hoverMonitor.stop()
+        hoverHideTask?.cancel()
         hoverRevealed = false
         refreshTask?.cancel()
         rehideTask?.cancel()
@@ -251,10 +251,11 @@ final class MenuBarCleanupController: ObservableObject {
     private func resumeAfterWake() {
         guard isStarted else { return }
         isSleeping = false
+        hoverRevealed = false
+        revealMode = .collapsed
         updateHotKeys()
         updateHoverMonitor()
         rehideTask?.cancel()
-        revealMode = .collapsed
         queueRefresh(force: true)
     }
 
@@ -357,22 +358,28 @@ final class MenuBarCleanupController: ObservableObject {
 
     private func scheduleRehide() {
         rehideTask?.cancel()
-        guard canRevealItems, autoRehide, isExpanded else { return }
+        // Hover owns its exit grace period. Configuration edits must not add a
+        // competing 15-second timer while the pointer is still over the bar.
+        guard canRevealItems, autoRehide, isExpanded, !hoverRevealed else { return }
         let delay = runtime.rehideDelay
         rehideTask = Task { [weak self] in
-            try? await Task.sleep(for: delay)
-            guard !Task.isCancelled, let self, self.canRevealItems else { return }
-            self.hoverRevealed = false
-            self.revealMode = .collapsed
-            self.apply()
+            while !Task.isCancelled {
+                try? await Task.sleep(for: delay)
+                guard !Task.isCancelled, let self, self.canRevealItems,
+                      self.isExpanded, !self.hoverRevealed else { return }
+                if self.hoverMonitor.preventsAutomaticCollapse { continue }
+                self.revealMode = .collapsed
+                self.apply()
+                return
+            }
         }
     }
 
     // MARK: - Hover reveal
 
     private func updateHoverMonitor() {
-        hoverHideTask?.cancel()
         guard isStarted, isSupported, enabled, revealOnHover, !isSleeping, !isPaused else {
+            hoverHideTask?.cancel()
             hoverMonitor.stop()
             // Leaving hover mode collapses what hover opened, like pause does.
             if hoverRevealed {
@@ -382,14 +389,21 @@ final class MenuBarCleanupController: ObservableObject {
             }
             return
         }
-        hoverMonitor.start(onEnter: { [weak self] in self?.hoverDidEnter() },
-                           onExit: { [weak self] in self?.hoverDidExit() })
+        let run = runSequence
+        hoverMonitor.start(onEnter: { [weak self] in
+            guard let self, self.runSequence == run else { return }
+            self.hoverDidEnter()
+        }, onExit: { [weak self] in
+            guard let self, self.runSequence == run else { return }
+            self.hoverDidExit()
+        })
     }
 
     private func hoverDidEnter() {
         hoverHideTask?.cancel()
         guard canRevealItems, configuration.revealOnHover else { return }
         guard !isExpanded else { return }
+        rehideTask?.cancel()
         hoverRevealed = true
         revealMode = .hidden
         refresh()
@@ -401,12 +415,18 @@ final class MenuBarCleanupController: ObservableObject {
         // own timer or toggle. A short grace period absorbs edge flicker.
         guard hoverRevealed, isExpanded else { return }
         hoverHideTask = Task { [weak self] in
-            try? await Task.sleep(for: .seconds(1))
-            guard !Task.isCancelled, let self,
-                  self.hoverRevealed, self.canRevealItems else { return }
-            self.hoverRevealed = false
-            self.revealMode = .collapsed
-            self.apply()
+            while !Task.isCancelled {
+                try? await Task.sleep(for: .seconds(1))
+                guard !Task.isCancelled, let self,
+                      self.hoverRevealed, self.canRevealItems else { return }
+                // Do not invalidate the visibility assertion underneath a menu,
+                // attached popup or drag that began during this grace period.
+                if self.hoverMonitor.preventsAutomaticCollapse { continue }
+                self.hoverRevealed = false
+                self.revealMode = .collapsed
+                self.apply()
+                return
+            }
         }
     }
 }

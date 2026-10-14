@@ -21,6 +21,9 @@ struct MenuBarCleanupRuntime {
     var refreshDelay: Duration = .milliseconds(600)
     var activationTimeout: Duration = .seconds(5)
     var rehideDelay: Duration = .seconds(15)
+    var hoverSnapshot: () -> MenuBarHoverSnapshot = {
+        .init(location: .zero, screenFrames: [], windows: [])
+    }
 
     static var live: Self {
         let supported: Bool
@@ -51,7 +54,8 @@ struct MenuBarCleanupRuntime {
                         bundleURL: app.bundleURL, isProhibited: app.activationPolicy == .prohibited,
                         isAccessory: app.activationPolicy == .accessory)
                 }
-            }
+            },
+            hoverSnapshot: { .live() }
         )
     }
 }

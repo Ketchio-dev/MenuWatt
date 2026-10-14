@@ -234,6 +234,28 @@ struct SettingsRenderingTests {
     }
 
     @Test
+    func nativeHoverTogglePersistsWithoutChangingAssignmentsOrResumingPause() async throws {
+        let fixture = SettingsRenderingFixture(pane: .menuBar,
+            startupEnvironment: ["MENUWATT_START_CLEANUP_PAUSED": "1"])
+        defer { fixture.dispose() }
+        try await fixture.settleLayout()
+        let choices = fixture.cleanup.configuration.sections
+        #expect(fixture.cleanup.isPaused)
+        #expect(!fixture.cleanup.revealOnHover)
+        try fixture.pressToggle("Reveal on hover")
+        try await fixture.settleLayout()
+        #expect(fixture.cleanup.revealOnHover)
+        #expect(fixture.defaults.bool(forKey: "menuBarCleanup.revealOnHover"))
+        #expect(fixture.cleanup.isPaused)
+        #expect(fixture.runtime.sessions.isEmpty)
+        #expect(fixture.cleanup.configuration.sections == choices)
+        try fixture.pressToggle("Reveal on hover")
+        #expect(!fixture.cleanup.revealOnHover)
+        #expect(fixture.cleanup.isPaused)
+        fixture.expectHiddenWindow()
+    }
+
+    @Test
     func nativeRevealCollapseShowAllAndRestoreKeepAppAssignments() async throws {
         let fixture = SettingsRenderingFixture(pane: .menuBar)
         defer { fixture.dispose() }

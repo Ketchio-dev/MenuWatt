@@ -1,50 +1,47 @@
 import AppKit
 import Foundation
 
-/// Polls the global mouse location and reports menu bar enter/exit.
-///
-/// Thaw tracks the cursor with a HID event tap; this polls
-/// `NSEvent.mouseLocation` on a timer instead, which needs no Accessibility
-/// permission. The location is valid process-wide even when another app is
-/// active. Tests inject locations directly.
+/// Polls pointer/window metadata without input interception or screen capture.
+/// A hidden/full-screen bar has no visible bar window, so its screen edge alone
+/// never triggers reveal. Keep hover-opened icons accessible during interaction.
 @MainActor
 final class MenuBarHoverMonitor {
-    /// Height of the menu bar strip from the top of a screen.
-    static let menuBarStripHeight: CGFloat = 30
-
     private let pollInterval: Duration
-    private let locationProvider: () -> NSPoint
-    private let screensProvider: () -> [NSRect]
+    private let snapshotProvider: () -> MenuBarHoverSnapshot
     private var pollTask: Task<Void, Never>?
-    private var isInside = false
+    private var isActive = false
     private var onEnter: (() -> Void)?
     private var onExit: (() -> Void)?
 
-    init(
-        pollInterval: Duration = .milliseconds(250),
-        locationProvider: @escaping () -> NSPoint = { NSEvent.mouseLocation },
-        screensProvider: @escaping () -> [NSRect] = {
-            NSScreen.screens.map(\.frame)
-        }
-    ) {
+    init(pollInterval: Duration = .milliseconds(250),
+         snapshotProvider: @escaping () -> MenuBarHoverSnapshot = { .live() }) {
         self.pollInterval = pollInterval
-        self.locationProvider = locationProvider
-        self.screensProvider = screensProvider
+        self.snapshotProvider = snapshotProvider
     }
 
     var running: Bool { pollTask != nil }
+
+    /// Recheck at the actual deadline; a menu may have opened during the grace
+    /// period, after the cursor had already left the bar.
+    var preventsAutomaticCollapse: Bool {
+        let snapshot = snapshotProvider()
+        return snapshot.isInMenuBar || snapshot.isInteracting
+    }
 
     func start(onEnter: @escaping () -> Void, onExit: @escaping () -> Void) {
         guard pollTask == nil else { return }
         self.onEnter = onEnter
         self.onExit = onExit
-        isInside = isInMenuBar(locationProvider())
+        // Activation needs a new entry, not whatever the cursor happened to
+        // cover when the feature was enabled or cleanup was resumed.
+        let snapshot = snapshotProvider()
+        isActive = snapshot.isInMenuBar
         pollTask = Task { [weak self] in
-            guard let self else { return }
             while !Task.isCancelled {
-                try? await Task.sleep(for: self.pollInterval)
+                guard let delay = self?.pollInterval else { return }
+                try? await Task.sleep(for: delay)
                 guard !Task.isCancelled else { return }
-                self.check()
+                self?.check()
             }
         }
     }
@@ -54,34 +51,20 @@ final class MenuBarHoverMonitor {
         pollTask = nil
         onEnter = nil
         onExit = nil
-        isInside = false
+        isActive = false
     }
 
-    /// Test hook: feed a location through the enter/exit logic synchronously.
-    func testFeed(_ location: NSPoint) {
-        check(location: location)
-    }
-
-    private func check(location: NSPoint? = nil) {
-        let point = location ?? locationProvider()
-        let inside = isInMenuBar(point)
-        guard inside != isInside else { return }
-        isInside = inside
-        if inside {
-            onEnter?()
-        } else {
-            onExit?()
-        }
-    }
-
-    private func isInMenuBar(_ point: NSPoint) -> Bool {
-        for frame in screensProvider() {
-            // AppKit screen frames use a bottom-left origin.
-            if point.x >= frame.minX && point.x <= frame.maxX
-                && point.y >= frame.maxY - Self.menuBarStripHeight && point.y <= frame.maxY {
-                return true
-            }
-        }
-        return false
+    /// Tests and the polling loop exercise the same snapshot transition logic.
+    func check() {
+        guard running else { return }
+        let snapshot = snapshotProvider()
+        // Never rearrange icons underneath a drag that enters the bar. Once
+        // hover has opened them, dragging instead keeps the reveal alive.
+        let active = isActive
+            ? snapshot.isInMenuBar || snapshot.isInteracting
+            : snapshot.isInMenuBar && !snapshot.mouseButtonsDown
+        guard active != isActive else { return }
+        isActive = active
+        if active { onEnter?() } else { onExit?() }
     }
 }
