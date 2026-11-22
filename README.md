@@ -13,7 +13,7 @@ brew tap Ketchio-dev/menuwatt
 brew install --cask menuwatt
 ```
 
-**Manual:** Download `MenuWatt.dmg` from the [latest release](https://github.com/Ketchio-dev/MenuWatt/releases/latest), open it, and drag to Applications.
+**Manual:** Download the DMG from the [latest release](https://github.com/Ketchio-dev/MenuWatt/releases/latest), open it, and drag MenuWatt to Applications.
 
 > On first launch, macOS may block the app. Run `xattr -cr /Applications/MenuWatt.app` or go to **System Settings > Privacy & Security > Open Anyway**.
 
@@ -41,9 +41,6 @@ Cycle count and power-source metadata no longer occupy a dashboard row. Menu bar
 cleanup controls are in **Settings → Menu Bar**, not in the monitoring popover.
 
 ## Menu bar cleanup (macOS 27)
-
-The public v1.1.1 download predates this feature. Build from the source here to
-try it before a release includes it.
 
 Open **Settings → Menu Bar**, enable cleanup, and choose which apps and system
 icons to keep visible. Icons owned by one bundle share one choice; running
