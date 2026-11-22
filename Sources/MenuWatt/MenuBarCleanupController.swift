@@ -308,7 +308,8 @@ final class MenuBarCleanupController: ObservableObject {
             return
         }
         let plan = MenuBarCleanupPolicy.plan(configuration: configuration,
-            runningBundleIDs: runningBundleIDs, ownBundleID: ownBundleID, reveal: revealMode)
+            runningBundleIDs: runningBundleIDs, ownBundleID: ownBundleID, reveal: revealMode,
+            retainedAllowedBundles: sessionManager.retainedAllowedBundles)
         guard plan.needsSession else {
             restoreSession()
             errorMessage = nil
@@ -316,7 +317,10 @@ final class MenuBarCleanupController: ObservableObject {
             return
         }
         guard sessionManager.currentPlan != plan else {
-            if !sessionManager.activating { status = activeStatus }
+            if !sessionManager.activating {
+                errorMessage = nil
+                status = activeStatus
+            }
             return
         }
 
@@ -330,7 +334,9 @@ final class MenuBarCleanupController: ObservableObject {
             guard let self, self.isStarted, self.runSequence == run else { return }
             if let failure {
                 self.errorMessage = failure.userMessage
-                self.status = "The original menu bar has been restored."
+                self.status = self.sessionManager.hasActiveSession
+                    ? "Previous menu bar cleanup is still active."
+                    : "The original menu bar has been restored."
             } else {
                 self.errorMessage = nil
                 self.status = self.activeStatus

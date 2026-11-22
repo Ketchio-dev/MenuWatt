@@ -99,6 +99,91 @@ func cleanupStaleCompletionCannotAffectReplacementOrRestore() {
 }
 
 @Test @MainActor
+func cleanupAppLaunchKeepsExistingRestrictionUntilReplacementIsActive() async throws {
+    let fake = CleanupTestRuntime()
+    let controller = fake.controller()
+    defer { fake.cleanup(controller) }
+    let newApp = MenuBarCleanupApp(bundleID: "com.example.new", title: "New",
+        bundleURL: URL(fileURLWithPath: "/Applications/New.app"), isProhibited: false)
+    controller.setSection(.alwaysHidden, for: "system:5")
+    controller.enabled = true
+    controller.start()
+    fake.completions[0](nil)
+    fake.apps.append(newApp)
+    fake.workspace.post(name: NSWorkspace.didLaunchApplicationNotification, object: nil)
+    try await Task.sleep(for: .milliseconds(80))
+
+    try #require(fake.sessions.count == 2)
+    #expect(fake.sessions[0].invalidations == 0)
+    #expect(fake.plans[1].allowedBundles.contains(newApp.bundleID))
+    #expect(!fake.plans[1].allowedSystemItems.contains(5))
+    fake.completions[1](nil)
+    #expect(fake.sessions[0].invalidations == 1)
+    #expect(fake.sessions[1].invalidations == 0)
+
+    // A quit and relaunch of an already allowed app can reuse the restriction.
+    fake.apps.removeAll()
+    fake.workspace.post(name: NSWorkspace.didTerminateApplicationNotification, object: nil)
+    try await Task.sleep(for: .milliseconds(80))
+    #expect(!controller.entries.contains { $0.bundleID == newApp.bundleID })
+    fake.apps.append(newApp)
+    fake.workspace.post(name: NSWorkspace.didLaunchApplicationNotification, object: nil)
+    try await Task.sleep(for: .milliseconds(80))
+    #expect(controller.entries.contains { $0.bundleID == newApp.bundleID })
+    #expect(fake.sessions.count == 2)
+    #expect(fake.sessions[1].invalidations == 0)
+}
+
+@Test @MainActor
+func cleanupFailedReplacementPreservesConfirmedRestrictionAndCanRetry() {
+    let fake = CleanupTestRuntime()
+    let controller = fake.controller()
+    defer { fake.cleanup(controller) }
+    controller.enabled = true
+    controller.start()
+    fake.completions[0](nil)
+    controller.setSection(.alwaysHidden, for: "system:5")
+    fake.completions[1](cleanupFailure)
+    #expect(fake.sessions[0].invalidations == 0)
+    #expect(fake.sessions[1].invalidations == 1)
+    #expect(controller.errorMessage == "Activation failed")
+    #expect(controller.status == "Previous menu bar cleanup is still active.")
+
+    controller.refresh()
+    #expect(fake.sessions.count == 3)
+    fake.completions[2](nil)
+    #expect(controller.errorMessage == nil)
+    #expect(fake.sessions[0].invalidations == 1)
+    #expect(fake.sessions[2].invalidations == 0)
+
+    controller.setSection(.hidden, for: "system:6")
+    #expect(fake.sessions[2].invalidations == 0)
+    controller.pauseCleanup()
+    fake.completions[3](nil)
+    #expect(controller.isPaused)
+    #expect(fake.sessions.allSatisfy { $0.invalidations == 1 })
+    #expect(controller.errorMessage == nil)
+}
+
+@Test @MainActor
+func cleanupCanRevertToConfirmedPlanWhileReplacementIsPending() {
+    let fake = CleanupTestRuntime()
+    let controller = fake.controller()
+    defer { fake.cleanup(controller) }
+    controller.enabled = true
+    controller.start()
+    fake.completions[0](nil)
+    controller.setSection(.hidden, for: "system:5")
+    controller.setSection(.visible, for: "system:5")
+    fake.completions[1](nil)
+
+    #expect(fake.sessions.count == 2)
+    #expect(fake.sessions[0].invalidations == 0)
+    #expect(fake.sessions[1].invalidations == 1)
+    #expect(controller.status == "Menu bar cleanup is active.")
+}
+
+@Test @MainActor
 func cleanupActivationFailureAndNilFactoryRestoreOriginalMenuBar() {
     let fake = CleanupTestRuntime()
     let controller = fake.controller()

@@ -48,7 +48,8 @@ public enum MenuBarCleanupPolicy {
 
     public static func plan(configuration: MenuBarCleanupConfiguration,
                             runningBundleIDs: Set<String>, ownBundleID: String,
-                            reveal: MenuBarRevealMode) -> MenuBarVisibilityPlan {
+                            reveal: MenuBarRevealMode,
+                            retainedAllowedBundles: Set<String> = []) -> MenuBarVisibilityPlan {
         func isVisible(_ key: String) -> Bool {
             switch configuration.sections[key] ?? .visible {
             case .visible: true
@@ -57,11 +58,15 @@ public enum MenuBarCleanupPolicy {
             }
         }
 
-        let allBundles = runningBundleIDs.union([ownBundleID])
-        let allowed = allBundles.filter { $0 == ownBundleID || isVisible(appKey($0)) }.sorted()
+        let allowedRunningBundles = runningBundleIDs.filter { $0 == ownBundleID || isVisible(appKey($0)) }
+        // Keeping a still-allowed ID after its app quits avoids reinstalling the
+        // restriction on exit and again when that app relaunches.
+        let allowed = allowedRunningBundles
+            .union(retainedAllowedBundles.filter { isVisible(appKey($0)) })
+            .union([ownBundleID]).sorted()
         // Keep the clock and Control Center available as recovery paths.
         let system = (0...8).filter { $0 == 2 || $0 == 8 || isVisible(systemKey($0)) }
-        let excludesItems = allowed.count < allBundles.count || system.count < 9
+        let excludesItems = allowedRunningBundles.count < runningBundleIDs.count || system.count < 9
         return MenuBarVisibilityPlan(
             allowedBundles: allowed, allowedSystemItems: system,
             needsSession: configuration.enabled && (configuration.keepActivityControlsHidden || excludesItems)

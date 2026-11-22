@@ -1,23 +1,28 @@
 import Foundation
 import MenuWattCore
 
-/// Owns one native visibility assertion: creation, completion routing and
-/// timeout handling.
-///
-/// Extracted from the controller following Thaw's split between the menu bar
-/// manager and its item-transaction code. The controller still decides *when*
-/// to apply; this type only guards *which* completion is current and reports
-/// structured failures instead of raw strings.
+/// Replaces native visibility assertions without releasing a confirmed
+/// restriction while its successor is still activating.
 @MainActor
 final class MenuBarCleanupSessionManager {
+    private struct Activation {
+        let plan: MenuBarVisibilityPlan
+        let session: any MenuBarCleanupSession
+    }
+
+    @MainActor
+    private final class FactoryReply {
+        var returned = false
+        var result: Result<Void, MenuBarCleanupFailure>?
+    }
+
     private let makeSession: (
         MenuBarVisibilityPlan, @escaping @MainActor (Error?) -> Void
     ) -> (any MenuBarCleanupSession)?
     private let activationTimeout: Duration
 
-    private var session: (any MenuBarCleanupSession)?
-    private var appliedPlan: MenuBarVisibilityPlan?
-    private var isActivating = false
+    private var active: Activation?
+    private var pending: Activation?
     private var activationSequence: UInt64 = 0
     private var timeoutTask: Task<Void, Never>?
 
@@ -31,65 +36,87 @@ final class MenuBarCleanupSessionManager {
         self.activationTimeout = activationTimeout
     }
 
-    var currentPlan: MenuBarVisibilityPlan? { appliedPlan }
-    var activating: Bool { isActivating }
-
-    func retire() {
-        activationSequence &+= 1
-        timeoutTask?.cancel()
-        session?.invalidate()
-        session = nil
-        appliedPlan = nil
-        isActivating = false
+    var currentPlan: MenuBarVisibilityPlan? { pending?.plan ?? active?.plan }
+    var activating: Bool { pending != nil }
+    var hasActiveSession: Bool { active != nil }
+    var retainedAllowedBundles: Set<String> {
+        Set(active?.plan.allowedBundles ?? []).union(pending?.plan.allowedBundles ?? [])
     }
 
-    /// Applies a plan. The completion reports a structured failure, or nil on success.
-    /// A nil factory result maps to `.unavailableOnBuild`; a late completion maps
-    /// to `.activationTimedOut` via the timeout path taken by the caller's task.
+    func retire() {
+        cancelPending()
+        active?.session.invalidate()
+        active = nil
+    }
+
+    private func cancelPending() {
+        activationSequence &+= 1
+        timeoutTask?.cancel()
+        timeoutTask = nil
+        pending?.session.invalidate()
+        pending = nil
+    }
+
     func apply(
         _ plan: MenuBarVisibilityPlan,
         isLive: @escaping () -> Bool,
         completion: @escaping @MainActor (MenuBarCleanupFailure?) -> Void
     ) {
-        retire()
+        cancelPending()
+        if active?.plan == plan {
+            completion(nil)
+            return
+        }
         let sequence = activationSequence
-        appliedPlan = plan
-        isActivating = true
-        let candidate = makeSession(plan) { [weak self] error in
+        let finish: @MainActor (MenuBarCleanupFailure?) -> Void = { [weak self] failure in
             guard let self, isLive(), self.activationSequence == sequence,
-                  self.isActivating else { return }
+                  let pending = self.pending else { return }
             self.timeoutTask?.cancel()
-            self.isActivating = false
-            if let error {
-                self.retire()
-                completion(.activationFailed(underlying: error))
+            self.timeoutTask = nil
+            self.pending = nil
+            if let failure {
+                pending.session.invalidate()
+                MenuBarCleanupDiagnostics.failed(failure)
             } else {
+                let previous = self.active
+                self.active = pending
+                previous?.session.invalidate()
                 MenuBarCleanupDiagnostics.activated(plan: plan)
-                completion(nil)
+            }
+            completion(failure)
+        }
+
+        // Wait for the factory to return the handle before processing a reply.
+        let earlyReply = FactoryReply()
+        let candidate = makeSession(plan) { error in
+            let failure = error.map { MenuBarCleanupFailure.activationFailed(underlying: $0) }
+            if earlyReply.returned {
+                finish(failure)
+            } else if earlyReply.result == nil {
+                earlyReply.result = failure.map(Result.failure) ?? .success(())
             }
         }
-        // A factory may fail synchronously. Never retain that failed session.
-        guard activationSequence == sequence else {
-            candidate?.invalidate()
-            return
-        }
+        earlyReply.returned = true
         guard let candidate else {
-            retire()
-            let failure = MenuBarCleanupFailure.unavailableOnBuild
+            let failure = switch earlyReply.result {
+            case .failure(let error): error
+            default: MenuBarCleanupFailure.unavailableOnBuild
+            }
             MenuBarCleanupDiagnostics.failed(failure)
             completion(failure)
             return
         }
-        session = candidate
-        guard isActivating else { return }
-        timeoutTask = Task { [weak self] in
-            try? await Task.sleep(for: self?.activationTimeout ?? .seconds(5))
-            guard !Task.isCancelled, let self, isLive(),
-                  self.activationSequence == sequence, self.isActivating else { return }
-            self.retire()
-            let failure = MenuBarCleanupFailure.activationTimedOut
-            MenuBarCleanupDiagnostics.failed(failure)
-            completion(failure)
+        pending = Activation(plan: plan, session: candidate)
+        switch earlyReply.result {
+        case .success: finish(nil)
+        case .failure(let failure): finish(failure)
+        case nil:
+            let delay = activationTimeout
+            timeoutTask = Task {
+                try? await Task.sleep(for: delay)
+                guard !Task.isCancelled else { return }
+                finish(.activationTimedOut)
+            }
         }
     }
 }
