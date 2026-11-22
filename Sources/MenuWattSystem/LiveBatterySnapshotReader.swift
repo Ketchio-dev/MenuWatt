@@ -187,10 +187,9 @@ struct SmartBatteryMetrics: Sendable {
 
 private enum LiveBatteryPowerSourceReader {
     static func read() -> LiveBatterySnapshotReader.PowerSourceSnapshot? {
-        let info = IOPSCopyPowerSourcesInfo().takeRetainedValue()
-        let sources = IOPSCopyPowerSourcesList(info).takeRetainedValue() as [AnyObject]
-
-        guard let firstSource = sources.first,
+        guard let info = IOPSCopyPowerSourcesInfo()?.takeRetainedValue(),
+              let sources = IOPSCopyPowerSourcesList(info)?.takeRetainedValue() as? [AnyObject],
+              let firstSource = sources.first,
               let description = IOPSGetPowerSourceDescription(info, firstSource)?.takeUnretainedValue() as? [String: Any] else {
             return nil
         }

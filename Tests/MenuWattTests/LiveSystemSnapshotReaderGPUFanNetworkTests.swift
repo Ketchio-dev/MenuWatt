@@ -42,7 +42,7 @@ private final class TimeStub: @unchecked Sendable {
 private func makeReaders(
     gpu: @escaping @Sendable () -> Double?,
     fans: @escaping @Sendable () -> [FanReading]?,
-    network: @escaping @Sendable () -> NetworkCounters?
+    network: @escaping @Sendable () -> NetworkInterfaceSnapshot?
 ) -> LiveSystemSnapshotReader.Readers {
     LiveSystemSnapshotReader.Readers(
         readCPUCounters: { CPUCounters(user: 0, system: 0, idle: 0, nice: 0) },
@@ -56,11 +56,14 @@ private func makeReaders(
 }
 
 @Test
-func networkBytesPerSecondIsComputedFromDelta() {
+func networkBytesPerSecondUsesDeltasFromMatchingInterfaces() {
     let counters = ValueQueue([
-        NetworkCounters(downBytes: 1_000, upBytes: 500),
-        NetworkCounters(downBytes: 1_000, upBytes: 500),
-        NetworkCounters(downBytes: 6_000, upBytes: 1_500)
+        NetworkInterfaceSnapshot(interfaces: [1: .init(downBytes: 1_000, upBytes: 500),
+                                              2: .init(downBytes: 8_000, upBytes: 8_000)])!,
+        NetworkInterfaceSnapshot(interfaces: [1: .init(downBytes: 6_000, upBytes: 1_500),
+                                              3: .init(downBytes: 5_000_000_000, upBytes: 9_000)])!,
+        NetworkInterfaceSnapshot(interfaces: [1: .init(downBytes: 3, upBytes: 2_500),
+                                              3: .init(downBytes: 5_000_000_200, upBytes: 9_000)])!
     ])
     let clock = TimeStub(0)
 
@@ -73,15 +76,16 @@ func networkBytesPerSecondIsComputedFromDelta() {
         clock: { clock.now() }
     )
 
-    // First read primes deltas with elapsed=0 fallback (still produces snapshot).
     clock.advance(2)
-    _ = reader.read()
+    let changedInterfaces = reader.read().network
+    #expect(changedInterfaces.isAvailable)
+    #expect(changedInterfaces.downloadBytesPerSecond == 2500)
+    #expect(changedInterfaces.uploadBytesPerSecond == 500)
+    #expect(changedInterfaces.totalDownBytes == 5_000_006_000)
     clock.advance(2)
-    let second = reader.read()
-
-    #expect(second.network.isAvailable)
-    #expect(abs(second.network.downloadBytesPerSecond - 2500) < 0.01)
-    #expect(abs(second.network.uploadBytesPerSecond - 500) < 0.01)
+    let reset = reader.read().network
+    #expect(reset.downloadBytesPerSecond == 100)
+    #expect(reset.uploadBytesPerSecond == 500)
 }
 
 @Test

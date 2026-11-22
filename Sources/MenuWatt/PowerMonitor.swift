@@ -89,15 +89,15 @@ final class PowerMonitor: ObservableObject {
     }
 
     private func requestRefresh(resetAnimation: Bool) {
-        scheduler.requestSample(sampler: sampler) { [weak self] payload, sequence in
+        scheduler.requestSample(sampler: sampler, supersedesCurrent: resetAnimation) { [weak self] payload, sequence in
             self?.applyIfCurrent(payload, resetAnimation: resetAnimation, sequence: sequence)
         }
     }
 
     private func applyIfCurrent(_ payload: SamplePayload, resetAnimation: Bool, sequence: UInt64) {
         guard scheduler.isCurrent(sequence) else { return }
-        apply(payload, resetAnimation: resetAnimation)
         scheduler.finishRequest()
+        apply(payload, resetAnimation: resetAnimation)
     }
 
     private func apply(_ payload: SamplePayload, resetAnimation: Bool) {

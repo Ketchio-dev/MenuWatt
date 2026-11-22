@@ -12,7 +12,7 @@ public final class LiveSystemSnapshotReader {
         let readKernelPressureLevel: @Sendable () -> PressureLevel
         let readGPUUtilization: @Sendable () -> Double?
         let readFans: @Sendable () -> [FanReading]?
-        let readNetworkCounters: @Sendable () -> NetworkCounters?
+        let readNetworkCounters: @Sendable () -> NetworkInterfaceSnapshot?
 
         static let live = Readers(
             readCPUCounters: SystemReaders.readCPUCounters,
@@ -30,7 +30,7 @@ public final class LiveSystemSnapshotReader {
     private var pressureHistory = HistoryBuffer()
     private var gpuHistory = HistoryBuffer()
     private var networkHistory = HistoryBuffer()
-    private var previousNetworkCounters: NetworkCounters?
+    private var previousNetworkCounters: NetworkInterfaceSnapshot?
     private var previousNetworkTimestamp: TimeInterval?
     private let readers: Readers
     private let clock: @Sendable () -> TimeInterval
@@ -188,24 +188,23 @@ public final class LiveSystemSnapshotReader {
             return NetworkSnapshot(
                 downloadBytesPerSecond: 0,
                 uploadBytesPerSecond: 0,
-                totalDownBytes: counters.downBytes,
-                totalUpBytes: counters.upBytes,
+                totalDownBytes: counters.totals.downBytes,
+                totalUpBytes: counters.totals.upBytes,
                 history: networkHistory.samples
             )
         }
 
         let elapsed = max(now - previousTimestamp, 0.001)
-        let downDelta = counters.downBytes >= previous.downBytes ? counters.downBytes - previous.downBytes : 0
-        let upDelta = counters.upBytes >= previous.upBytes ? counters.upBytes - previous.upBytes : 0
-        let downRate = Double(downDelta) / elapsed
-        let upRate = Double(upDelta) / elapsed
+        let delta = counters.delta(since: previous)
+        let downRate = Double(delta.downBytes) / elapsed
+        let upRate = Double(delta.upBytes) / elapsed
         networkHistory.append(downRate + upRate)
 
         return NetworkSnapshot(
             downloadBytesPerSecond: downRate,
             uploadBytesPerSecond: upRate,
-            totalDownBytes: counters.downBytes,
-            totalUpBytes: counters.upBytes,
+            totalDownBytes: counters.totals.downBytes,
+            totalUpBytes: counters.totals.upBytes,
             history: networkHistory.samples
         )
     }
@@ -363,7 +362,7 @@ private enum SystemReaders {
         return result.isEmpty ? nil : result
     }
 
-    static func readNetworkCounters() -> NetworkCounters? {
+    static func readNetworkCounters() -> NetworkInterfaceSnapshot? {
         NetworkCounterReader.read()
     }
 

@@ -59,11 +59,12 @@ final class MenuBarCleanupSessionManager {
 
     func apply(
         _ plan: MenuBarVisibilityPlan,
+        forceReapply: Bool = false,
         isLive: @escaping () -> Bool,
         completion: @escaping @MainActor (MenuBarCleanupFailure?) -> Void
     ) {
         cancelPending()
-        if active?.plan == plan {
+        if !forceReapply, active?.plan == plan {
             completion(nil)
             return
         }

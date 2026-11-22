@@ -36,6 +36,7 @@ final class MenuBarCleanupController: ObservableObject {
     private var observers: [AnyCancellable] = []
     private var rehideTask: Task<Void, Never>?
     private var refreshTask: Task<Void, Never>?
+    private var needsRefreshReapply = false
     private let sessionManager: MenuBarCleanupSessionManager
     private let hotKeyManager: MenuBarCleanupHotKeyManager
     private let hoverMonitor: MenuBarHoverMonitor
@@ -110,14 +111,12 @@ final class MenuBarCleanupController: ObservableObject {
         runSequence &+= 1
         let run = runSequence
         let workspace = runtime.workspaceNotifications
-        for name in [NSWorkspace.didLaunchApplicationNotification, NSWorkspace.didTerminateApplicationNotification] {
-            observers.append(workspace.publisher(for: name).sink { [weak self] _ in
-                Task { @MainActor [weak self] in
-                    guard let self, self.runSequence == run else { return }
-                    self.queueRefresh()
-                }
-            })
-        }
+        observers.append(runtime.observeAppChanges { [weak self] in
+            Task { @MainActor [weak self] in
+                guard let self, self.runSequence == run else { return }
+                self.queueRefresh()
+            }
+        })
         for name in [NSWorkspace.didWakeNotification, NSWorkspace.screensDidWakeNotification] {
             observers.append(workspace.publisher(for: name).sink { [weak self] _ in
                 Task { @MainActor [weak self] in
@@ -149,6 +148,7 @@ final class MenuBarCleanupController: ObservableObject {
         runSequence &+= 1
         observers.removeAll()
         refreshTask?.cancel()
+        needsRefreshReapply = false
         rehideTask?.cancel()
         hoverHideTask?.cancel()
         hoverMonitor.stop()
@@ -224,13 +224,15 @@ final class MenuBarCleanupController: ObservableObject {
     }
 
     func refresh() {
+        let forceReapply = needsRefreshReapply
+        needsRefreshReapply = false
         let apps = runtime.runningApps()
         runningBundleIDs = Set(apps.map(\.bundleID))
         entries = MenuBarCleanupCatalog.buildEntries(
             apps: apps, sections: configuration.sections,
             runningBundleIDs: runningBundleIDs, ownBundleID: ownBundleID
         )
-        apply()
+        apply(forceReapply: forceReapply)
     }
 
     private func prepareForSleep() {
@@ -241,6 +243,7 @@ final class MenuBarCleanupController: ObservableObject {
         hoverHideTask?.cancel()
         hoverRevealed = false
         refreshTask?.cancel()
+        needsRefreshReapply = false
         rehideTask?.cancel()
         revealMode = .collapsed
         restoreSession()
@@ -261,11 +264,9 @@ final class MenuBarCleanupController: ObservableObject {
 
     private func queueRefresh(force: Bool = false) {
         guard isStarted, !isSleeping else { return }
-        // Retire now so a pre-wake completion/timeout cannot affect recovery.
-        if force {
-            restoreSession()
-            if enabled, isSupported, !isPaused { status = "Updating menu bar…" }
-        }
+        // Coalesce app changes with display recovery and keep the native
+        // restriction active until the replacement is confirmed.
+        needsRefreshReapply = needsRefreshReapply || force
         refreshTask?.cancel()
         let delay = runtime.refreshDelay
         refreshTask = Task { [weak self] in
@@ -299,7 +300,7 @@ final class MenuBarCleanupController: ObservableObject {
         }
     }
 
-    private func apply() {
+    private func apply(forceReapply: Bool = false) {
         guard isStarted, !isSleeping else { return }
         guard isSupported else { return }
         guard !isPaused else {
@@ -316,7 +317,7 @@ final class MenuBarCleanupController: ObservableObject {
             status = enabled ? "All menu bar controls are visible." : "Menu bar cleanup is off."
             return
         }
-        guard sessionManager.currentPlan != plan else {
+        guard forceReapply || sessionManager.currentPlan != plan else {
             if !sessionManager.activating {
                 errorMessage = nil
                 status = activeStatus
@@ -327,7 +328,7 @@ final class MenuBarCleanupController: ObservableObject {
         errorMessage = nil
         status = "Updating menu bar…"
         let run = runSequence
-        sessionManager.apply(plan, isLive: { [weak self] in
+        sessionManager.apply(plan, forceReapply: forceReapply, isLive: { [weak self] in
             guard let self else { return false }
             return self.isStarted && self.runSequence == run
         }) { [weak self] failure in

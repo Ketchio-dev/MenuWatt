@@ -84,6 +84,22 @@ struct PowerMonitorTests {
     }
 
     @Test
+    func slowPeriodicSamplesStillPublish() async throws {
+        let slow = TestSampler.Response(
+            payload: .init(battery: makeBatterySnapshot(percentage: 71, state: .charging),
+                           system: makeSystemSnapshot(cpuUsage: 42)),
+            delayNanoseconds: 160_000_000
+        )
+        let sampler = TestSampler(responses: Array(repeating: slow, count: 50))
+        let monitor = PowerMonitor(sampler: sampler, configuration: .init(
+            refreshInterval: 0.04, animationMinimumInterval: 0.02))
+        defer { monitor.stop() }
+        monitor.start()
+        try await waitUntil { monitor.snapshot.percentage == 71 }
+        #expect(monitor.systemSnapshot.cpu.totalUsage == 42)
+    }
+
+    @Test
     func shorterRefreshIntervalTakesEffectWithoutWaitingForOldSleep() async throws {
         let sampler = TestSampler(responses: [.steadyState])
         let monitor = PowerMonitor(

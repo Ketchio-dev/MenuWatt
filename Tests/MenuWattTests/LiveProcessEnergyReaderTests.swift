@@ -92,6 +92,22 @@ func secondSampleSortsByEnergyImpactAndCapsToFifteen() {
 }
 
 @Test
+func energyImpactIsARateAndUsesEachInterruptWakeupOnce() {
+    let queue = ListQueue([
+        [makeCounter(pid: 1, name: "worker")],
+        [makeCounter(pid: 1, name: "worker", user: 100_000_000, interrupt: 20, idle: 5)],
+        [makeCounter(pid: 1, name: "worker", user: 1_100_000_000, interrupt: 220, idle: 55)]
+    ])
+    let clock = TimeStub(0)
+    let reader = LiveProcessEnergyReader(readers: .init(listProcesses: { queue.next() }, clock: { clock.now() }))
+    _ = reader.read()
+    clock.advance(1)
+    #expect(reader.read().entries.first?.energyImpact == 110)
+    clock.advance(10)
+    #expect(reader.read().entries.first?.energyImpact == 110)
+}
+
+@Test
 func disappearingPidsAreSkipped() {
     let queue = ListQueue([
         [

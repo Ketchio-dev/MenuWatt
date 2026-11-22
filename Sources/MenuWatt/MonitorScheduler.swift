@@ -8,8 +8,8 @@ import OSLog
 /// what makes interval changes take effect without waiting out the old sleep.
 ///
 /// Extracted from PowerMonitor; tick timing and latest-wins sequencing are
-/// unchanged. The sampler call stays on the caller's task so a slow sample
-/// never blocks the next tick decision.
+/// unchanged for explicit refreshes. Periodic ticks leave the current sample
+/// running so a slow reader can still publish.
 @MainActor
 final class MonitorRefreshScheduler {
     private var loopTask: Task<Void, Never>?
@@ -50,9 +50,10 @@ final class MonitorRefreshScheduler {
     /// Samples on a child task and delivers only the latest request's payload.
     func requestSample(
         sampler: any MonitorSampling,
+        supersedesCurrent: Bool,
         deliver: @escaping @MainActor (SamplePayload, UInt64) -> Void
     ) {
-        guard isRunning else { return }
+        guard isRunning, supersedesCurrent || requestTask == nil else { return }
         sequence &+= 1
         let current = sequence
         requestTask?.cancel()
