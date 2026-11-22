@@ -39,10 +39,7 @@ public final class LiveProcessEnergyReader {
         )
     }
 
-    // Public-ish energy-impact weighting. Activity Monitor does not publish its
-    // exact formula; these weights approximate the relative contribution of CPU
-    // time vs. wakeups described in Apple's "Energy Efficiency Guide" and are
-    // intentionally tunable in one place.
+    // MenuWatt's relative weights for CPU time and interrupt wakeups.
     private static let cpuNsWeight = 1.0 / 1_000_000  // 1 per ms of CPU time
     private static let wakeupWeight = 0.5              // per wakeup
     private static let topCount = 15
@@ -82,7 +79,7 @@ public final class LiveProcessEnergyReader {
             let cpuDelta = deltaNs(counters: counters, previous: previous)
             let wakeupDelta = deltaWakeups(counters: counters, previous: previous)
 
-            let energyImpact = Double(cpuDelta) * Self.cpuNsWeight + Double(wakeupDelta) * Self.wakeupWeight
+            let energyImpact = (Double(cpuDelta) * Self.cpuNsWeight + Double(wakeupDelta) * Self.wakeupWeight) / elapsed
             let cpuPercent = Double(cpuDelta) / (elapsed * 1_000_000_000) * 100
 
             guard energyImpact > 0 else { continue }
@@ -112,13 +109,10 @@ public final class LiveProcessEnergyReader {
     }
 
     private func deltaWakeups(counters: ProcessEnergyCounters, previous: ProcessEnergyCounters) -> UInt64 {
-        let interruptDelta = counters.interruptWakeups >= previous.interruptWakeups
+        // XNU also credits a platform-idle wake to the interrupt counter.
+        return counters.interruptWakeups >= previous.interruptWakeups
             ? counters.interruptWakeups - previous.interruptWakeups
             : 0
-        let idleDelta = counters.idleWakeups >= previous.idleWakeups
-            ? counters.idleWakeups - previous.idleWakeups
-            : 0
-        return interruptDelta &+ idleDelta
     }
 }
 

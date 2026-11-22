@@ -1,5 +1,6 @@
 import AppKit
 import CMenuBar
+import Combine
 import MenuWattCore
 
 @MainActor
@@ -23,6 +24,14 @@ struct MenuBarCleanupRuntime {
     var rehideDelay: Duration = .seconds(15)
     var hoverSnapshot: () -> MenuBarHoverSnapshot = {
         .init(location: .zero, screenFrames: [], windows: [])
+    }
+    var observeRunningApps: ((@escaping @Sendable () -> Void) -> AnyCancellable)?
+
+    func observeAppChanges(_ onChange: @escaping @Sendable () -> Void) -> AnyCancellable {
+        if let observeRunningApps { return observeRunningApps(onChange) }
+        return workspaceNotifications.publisher(for: NSWorkspace.didLaunchApplicationNotification)
+            .merge(with: workspaceNotifications.publisher(for: NSWorkspace.didTerminateApplicationNotification))
+            .sink { _ in onChange() }
     }
 
     static var live: Self {
@@ -55,7 +64,14 @@ struct MenuBarCleanupRuntime {
                         isAccessory: app.activationPolicy == .accessory)
                 }
             },
-            hoverSnapshot: { .live() }
+            hoverSnapshot: { .live() },
+            observeRunningApps: { onChange in
+                // The workspace launch notification omits accessory-only apps.
+                let observation = NSWorkspace.shared.observe(\.runningApplications, options: [.new]) { _, _ in
+                    onChange()
+                }
+                return AnyCancellable { observation.invalidate() }
+            }
         )
     }
 }

@@ -106,10 +106,10 @@ and [Thaw's release notes on app-launch redraws](https://github.com/thaw-app/Tha
 
 MenuWatt reads system power directly from the **SMC** (System Management Controller) via IOKit. Battery metadata comes from `AppleSmartBattery` in the IOKit registry. CPU and memory stats use Mach `host_statistics`; network rates use 64-bit routing counters and monotonic elapsed time. Monitoring is local, without a separate daemon. Optional version checks call GitHub's releases API.
 
-Top Energy is an estimated CPU-time/wakeup impact score per sample, not per-app
-watts or Activity Monitor's exact score. Longer refresh intervals can produce
-larger scores; total power measurement is separate. Sensors unavailable on a
-particular Mac show an unavailable state rather than a measured zero.
+Top Energy ranks processes by a relative score per second, based on CPU time
+and interrupt wakeups averaged over the latest sample. Total system power is
+measured separately. Sensors unavailable on a particular Mac show an
+unavailable state.
 
 Works on all Apple Silicon Macs (M1-M5) without root privileges.
 

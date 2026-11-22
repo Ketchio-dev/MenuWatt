@@ -1,4 +1,5 @@
 import AppKit
+import Combine
 import Foundation
 import Testing
 @testable import MenuWatt
@@ -20,6 +21,7 @@ private final class CleanupTestRuntime {
     var supported = true
     var returnsNil = false
     var synchronousError: Error?
+    var observeRunningApps: ((@escaping @Sendable () -> Void) -> AnyCancellable)?
     let workspace = NotificationCenter()
     let application = NotificationCenter()
     let domain = "MenuWatt.CleanupLifecycleTests.\(UUID().uuidString)"
@@ -47,7 +49,8 @@ private final class CleanupTestRuntime {
             makeHotKeys: { [self] handler in hotKeyHandler = handler; return NSObject() },
             runningApps: { [self] in apps },
             workspaceNotifications: workspace, applicationNotifications: application,
-            refreshDelay: refresh, activationTimeout: timeout, rehideDelay: rehide
+            refreshDelay: refresh, activationTimeout: timeout, rehideDelay: rehide,
+            observeRunningApps: observeRunningApps
         ))
     }
 
@@ -320,14 +323,43 @@ func cleanupDisplayChangesForceReapplyButStopCancelsQueuedRefresh() async throws
     controller.start()
     fake.completions[0](nil)
     fake.application.post(name: NSApplication.didChangeScreenParametersNotification, object: nil)
-    try await Task.sleep(for: .milliseconds(80))
-    #expect(fake.sessions.count == 2)
+    let deadline = ContinuousClock.now.advanced(by: .seconds(2))
+    while fake.sessions.count < 2, ContinuousClock.now < deadline {
+        try await Task.sleep(for: .milliseconds(10))
+    }
+    try #require(fake.sessions.count == 2)
+    #expect(fake.sessions[0].invalidations == 0)
+    #expect(fake.plans[0] == fake.plans[1])
+    fake.completions[1](nil)
     #expect(fake.sessions[0].invalidations == 1)
     fake.workspace.post(name: NSWorkspace.didWakeNotification, object: nil)
     controller.stop()
     try await Task.sleep(for: .milliseconds(80))
     #expect(fake.sessions.count == 2)
     #expect(controller.status == "Menu bar cleanup is stopped.")
+}
+
+@Test @MainActor
+func cleanupRefreshesAppCatalogFromRunningAppObservation() async throws {
+    let fake = CleanupTestRuntime()
+    let changes = PassthroughSubject<Void, Never>()
+    fake.observeRunningApps = { onChange in changes.sink { _ in onChange() } }
+    let controller = fake.controller()
+    defer { fake.cleanup(controller) }
+    controller.enabled = true
+    controller.start()
+    fake.completions[0](nil)
+    let bundleID = "com.example.accessory"
+    fake.apps.append(.init(bundleID: bundleID, title: "Accessory",
+        bundleURL: URL(fileURLWithPath: "/Applications/Accessory.app"), isProhibited: false, isAccessory: true))
+    changes.send(())
+    let deadline = ContinuousClock.now.advanced(by: .seconds(2))
+    while fake.sessions.count < 2, ContinuousClock.now < deadline {
+        try await Task.sleep(for: .milliseconds(10))
+    }
+    #expect(controller.entries.contains { $0.bundleID == bundleID })
+    #expect(fake.plans.last?.allowedBundles.contains(bundleID) == true)
+    #expect(fake.sessions[0].invalidations == 0)
 }
 
 @Test @MainActor
@@ -766,8 +798,11 @@ func cleanupManualPauseIsRejectedWhileAsleep() async throws {
     fake.completions[0](nil)
     let savedDomain = fake.persistentDomain
     fake.workspace.post(name: NSWorkspace.willSleepNotification, object: nil)
-    try await Task.sleep(for: .milliseconds(30))
-    #expect(controller.status == "Menu bar cleanup is paused for sleep.")
+    let sleepDeadline = ContinuousClock.now + .seconds(2)
+    while controller.status != "Menu bar cleanup is paused for sleep.", ContinuousClock.now < sleepDeadline {
+        try await Task.sleep(for: .milliseconds(10))
+    }
+    try #require(controller.status == "Menu bar cleanup is paused for sleep.")
     controller.pauseCleanup()
     controller.resumeCleanup()
     #expect(!controller.isPaused)
@@ -776,10 +811,13 @@ func cleanupManualPauseIsRejectedWhileAsleep() async throws {
     #expect(fake.persistentDomain == savedDomain)
     fake.workspace.post(name: NSWorkspace.didWakeNotification, object: nil)
     fake.workspace.post(name: NSWorkspace.screensDidWakeNotification, object: nil)
-    try await Task.sleep(for: .milliseconds(80))
+    let wakeDeadline = ContinuousClock.now + .seconds(2)
+    while fake.sessions.count < 2, ContinuousClock.now < wakeDeadline {
+        try await Task.sleep(for: .milliseconds(10))
+    }
     #expect(!controller.isPaused)
     #expect(controller.revealMode == .collapsed)
-    #expect(fake.sessions.count == 2)
+    try #require(fake.sessions.count == 2)
     fake.completions.last!(nil)
     #expect(controller.status == "Menu bar cleanup is active.")
     #expect(fake.persistentDomain == savedDomain)

@@ -17,6 +17,10 @@ struct ProcessEnergySectionView: View {
                     .font(.system(size: 11, weight: .semibold))
                     .foregroundStyle(.secondary)
                 Spacer()
+                Text("CPU + wakeups estimate")
+                    .font(.system(size: 10))
+                    .foregroundStyle(.secondary)
+                    .help("Relative score per second based on CPU time and interrupt wakeups.")
             }
 
             if let unavailableMessage = presentation.unavailableMessage {
