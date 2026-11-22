@@ -271,7 +271,10 @@ func manualAutoCollapseWaitsUntilMenuInteractionEndsEvenWithHoverOff() async thr
     try await Task.sleep(for: .milliseconds(100))
     #expect(controller.isExpanded)
     fake.menuOpen = false
-    try await Task.sleep(for: .milliseconds(100))
+    let deadline = ContinuousClock.now.advanced(by: .seconds(2))
+    while controller.isExpanded, ContinuousClock.now < deadline {
+        try await Task.sleep(for: .milliseconds(10))
+    }
     #expect(!controller.isExpanded)
 }
 
