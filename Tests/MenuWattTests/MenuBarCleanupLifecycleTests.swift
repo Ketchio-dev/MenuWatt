@@ -798,8 +798,11 @@ func cleanupManualPauseIsRejectedWhileAsleep() async throws {
     fake.completions[0](nil)
     let savedDomain = fake.persistentDomain
     fake.workspace.post(name: NSWorkspace.willSleepNotification, object: nil)
-    try await Task.sleep(for: .milliseconds(30))
-    #expect(controller.status == "Menu bar cleanup is paused for sleep.")
+    let sleepDeadline = ContinuousClock.now + .seconds(2)
+    while controller.status != "Menu bar cleanup is paused for sleep.", ContinuousClock.now < sleepDeadline {
+        try await Task.sleep(for: .milliseconds(10))
+    }
+    try #require(controller.status == "Menu bar cleanup is paused for sleep.")
     controller.pauseCleanup()
     controller.resumeCleanup()
     #expect(!controller.isPaused)
@@ -808,10 +811,13 @@ func cleanupManualPauseIsRejectedWhileAsleep() async throws {
     #expect(fake.persistentDomain == savedDomain)
     fake.workspace.post(name: NSWorkspace.didWakeNotification, object: nil)
     fake.workspace.post(name: NSWorkspace.screensDidWakeNotification, object: nil)
-    try await Task.sleep(for: .milliseconds(80))
+    let wakeDeadline = ContinuousClock.now + .seconds(2)
+    while fake.sessions.count < 2, ContinuousClock.now < wakeDeadline {
+        try await Task.sleep(for: .milliseconds(10))
+    }
     #expect(!controller.isPaused)
     #expect(controller.revealMode == .collapsed)
-    #expect(fake.sessions.count == 2)
+    try #require(fake.sessions.count == 2)
     fake.completions.last!(nil)
     #expect(controller.status == "Menu bar cleanup is active.")
     #expect(fake.persistentDomain == savedDomain)
