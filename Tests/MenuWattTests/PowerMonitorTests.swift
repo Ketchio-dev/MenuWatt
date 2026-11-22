@@ -92,11 +92,10 @@ struct PowerMonitorTests {
         )
         defer { monitor.stop() }
         monitor.start()
-        try await Task.sleep(for: .milliseconds(30))
+        try await waitUntil { await sampler.count() >= 1 }
         #expect(await sampler.count() == 1)
         monitor.setRefreshInterval(0.02)
-        try await Task.sleep(for: .milliseconds(100))
-        #expect(await sampler.count() >= 3)
+        try await waitUntil { await sampler.count() >= 3 }
         monitor.stop()
         let stoppedCount = await sampler.count()
         try await Task.sleep(for: .milliseconds(60))
@@ -282,12 +281,12 @@ struct PowerMonitorTests {
         #expect(PressureLevelPresentation.themeColor(for: .critical) == .red)
     }
 
-    private func waitUntil(_ condition: () -> Bool) async throws {
+    private func waitUntil(_ condition: () async -> Bool) async throws {
         let deadline = ContinuousClock.now.advanced(by: .seconds(2))
-        while !condition(), ContinuousClock.now < deadline {
+        while !(await condition()), ContinuousClock.now < deadline {
             try await Task.sleep(for: .milliseconds(5))
         }
-        try #require(condition())
+        try #require(await condition())
     }
 }
 
