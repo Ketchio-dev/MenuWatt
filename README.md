@@ -42,6 +42,9 @@ cleanup controls are in **Settings → Menu Bar**, not in the monitoring popover
 
 ## Menu bar cleanup (macOS 27)
 
+The public v1.1.1 download predates this feature. Build from the source here to
+try it before a release includes it.
+
 Open **Settings → Menu Bar**, enable cleanup, and choose which apps and system
 icons to keep visible. Icons owned by one bundle share one choice; running
 menu bar helpers (such as Passwords) appear separately from their parent apps.
@@ -98,8 +101,9 @@ Screen Recording, Accessibility, Input Monitoring, root privileges or changes
 to SIP. MenuWatt's existing MIT license is retained.
 
 For the runtime behavior investigated during development, see
-[Pelmet's FAQ](https://github.com/fif7y/pelmet/blob/main/docs/FAQ.md) and
-[Thaw's macOS 27 investigation](https://github.com/thaw-app/Thaw/issues/687).
+[Dimble's FAQ](https://github.com/fif7y/dimble/blob/main/docs/FAQ.md),
+[Dimble's assertion handoff](https://github.com/fif7y/dimble/blob/1fc7ff907b8c3ffb336967883d6cd0eab3354624/Packages/PelmetEngine/Sources/PelmetEngine/AgentBarEngine.swift#L735-L781),
+and [Thaw's release notes on app-launch redraws](https://github.com/thaw-app/Thaw/releases/tag/3.0.0-beta.4).
 
 ## How It Works
 
