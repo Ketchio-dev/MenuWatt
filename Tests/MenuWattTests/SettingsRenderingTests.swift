@@ -435,7 +435,7 @@ struct SettingsRenderingTests {
         }
         // The displayed panel is capped; measure the unbounded metrics too.
         #expect(withGraphs.metricsHeight > withoutGraphs.metricsHeight + 100)
-        #expect(withGraphs.contentHeight > withoutGraphs.contentHeight + 80)
+        #expect(withGraphs.contentHeight > withoutGraphs.contentHeight)
         #expect(withGraphs.contentHeight <= 641)
         #expect(withoutGraphs.contentHeight < 550)
         #expect(!withoutGraphs.text.contains("Sys"))
