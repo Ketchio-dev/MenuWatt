@@ -20,7 +20,7 @@ struct OverviewSettingsPane: View {
             )
 
             SettingsCard(title: "Startup", systemImage: "power") {
-                SettingsRow(label: "Launch at Login", detail: "Start MenuWatt when you sign in.") {
+                SettingsRow(label: "Launch at Login") {
                     Toggle("Launch at Login", isOn: launchAtLoginBinding)
                         .labelsHidden()
                 }
@@ -44,7 +44,7 @@ struct OverviewSettingsPane: View {
                     }
                     .labelsHidden()
                     .pickerStyle(.menu)
-                    .frame(width: 166)
+                    .frame(width: 166, alignment: .trailing)
                     .accessibilityLabel("Menu bar indicator")
                 }
 
@@ -64,12 +64,10 @@ struct OverviewSettingsPane: View {
                     Toggle("Show pixel character", isOn: $preferences.showsSprite)
                         .labelsHidden()
                 }
-
-                SettingsNote("The indicator and pixel character appear in your macOS menu bar. Longer update intervals save battery.")
             }
 
             SettingsCard(title: "Dashboard", systemImage: "square.stack.3d.up") {
-                SettingsRow(label: "Show graphs", detail: "CPU, GPU and network history. Turn off for a shorter panel; live values keep updating.") {
+                SettingsRow(label: "Show graphs", detail: "CPU, GPU and network history.") {
                     Toggle("Show graphs", isOn: $preferences.showsGraphs).labelsHidden()
                 }
                 Text("Visible sections").font(.system(size: 11, weight: .medium))

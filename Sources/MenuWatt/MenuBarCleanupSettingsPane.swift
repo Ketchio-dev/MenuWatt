@@ -16,7 +16,7 @@ struct MenuBarCleanupSettingsPane: View {
 
     var body: some View {
         VStack(alignment: .leading, spacing: 24) {
-            SettingsPaneTitle(title: "Menu Bar", subtitle: "Choose what stays visible. Pause to use system controls.")
+            SettingsPaneTitle(title: "Menu Bar", subtitle: "Choose which icons stay visible.")
 
             cleanupStatus
 
@@ -45,14 +45,14 @@ struct MenuBarCleanupSettingsPane: View {
                 }
 
                 SettingsCard(title: "Behavior", systemImage: "slider.horizontal.3") {
-                    SettingsRow(label: "Hide large activity controls", detail: "Microphone / camera controls stay hidden when you reveal apps. Audio keeps playing.") {
+                    SettingsRow(label: "Hide large activity controls", detail: "Keeps the microphone and camera controls hidden while audio continues.") {
                         Toggle("Hide large activity controls", isOn: $cleanup.keepActivityControlsHidden)
                             .labelsHidden()
                     }
-                    SettingsRow(label: "Collapse after 15 seconds", detail: "Applies to temporarily revealed icons, not Pause.") {
+                    SettingsRow(label: "Collapse after 15 seconds") {
                         Toggle("Collapse after 15 seconds", isOn: $cleanup.autoRehide).labelsHidden()
                     }
-                    SettingsRow(label: "Reveal on hover", detail: "Hover over a visible menu bar to reveal Hidden icons. They collapse a second after leaving; open menus, attached popups and drags delay collapse. No extra permissions needed.") {
+                    SettingsRow(label: "Reveal on hover", detail: "Shows Hidden icons while the pointer is over the menu bar.") {
                         Toggle("Reveal on hover", isOn: $cleanup.revealOnHover).labelsHidden()
                     }
                 }
@@ -65,7 +65,7 @@ struct MenuBarCleanupSettingsPane: View {
                 }
 
                 SettingsCard(title: "Apps", systemImage: "app") {
-                    SettingsNote("Running apps and saved choices, not a detected icon list. Apps without an icon are unaffected. Icons from one bundle share a setting; menu bar helpers appear separately.")
+                    SettingsNote("All icons from the same app share a setting. Helpers are listed separately.")
                     HStack(spacing: 8) {
                         Image(systemName: "magnifyingglass").foregroundStyle(.secondary)
                             .accessibilityHidden(true)
@@ -132,17 +132,16 @@ struct MenuBarCleanupSettingsPane: View {
                     Button(cleanup.isPaused ? "Resume Cleanup" : "Pause Cleanup") {
                         if cleanup.isPaused { cleanup.resumeCleanup() } else { cleanup.pauseCleanup() }
                     }
-                    .buttonStyle(SettingsActionStyle(prominent: true))
+                    .buttonStyle(SettingsActionStyle(prominent: cleanup.isPaused))
                     .disabled(!cleanup.enabled)
                     .help(cleanup.isPaused ? "Reapplies cleanup with your saved choices."
                           : "Releases the system restriction and may reveal all icons, including Always Hidden.")
                 }
             }
-            if cleanup.isSupported {
+            if cleanup.isSupported, cleanup.enabled {
                 SettingsNote(cleanup.isPaused
-                    ? "System controls are available. Your choices are saved. Resume when finished; relaunching MenuWatt also starts cleanup again."
-                    : "While active, cleanup hides Focus and some media controls. Clicking the clock may not open Notification Center. Pause releases this mode without changing your choices.")
-                SettingsNote("Pause can reveal all icons, including Always Hidden and large microphone / camera controls. The small privacy indicator is managed by macOS.")
+                    ? "Your choices are saved. Cleanup resumes when you click Resume Cleanup or reopen MenuWatt."
+                    : "Cleanup can affect Focus, media controls and the clock. Pause restores system controls and may reveal all icons.")
             }
         }
         .padding(14)

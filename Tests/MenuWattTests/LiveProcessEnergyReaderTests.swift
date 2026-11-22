@@ -73,26 +73,11 @@ func firstSampleProducesEmptyEntries() {
 }
 
 @Test
-func secondSampleSortsByEnergyImpactAndCapsToFive() {
+func secondSampleSortsByEnergyImpactAndCapsToFifteen() {
+    let processIDs = (1...20).map(Int32.init)
     let queue = ListQueue([
-        [
-            makeCounter(pid: 1, name: "a"),
-            makeCounter(pid: 2, name: "b"),
-            makeCounter(pid: 3, name: "c"),
-            makeCounter(pid: 4, name: "d"),
-            makeCounter(pid: 5, name: "e"),
-            makeCounter(pid: 6, name: "f"),
-            makeCounter(pid: 7, name: "g")
-        ],
-        [
-            makeCounter(pid: 1, name: "a", user: 1_000_000),
-            makeCounter(pid: 2, name: "b", user: 5_000_000),
-            makeCounter(pid: 3, name: "c", user: 2_000_000),
-            makeCounter(pid: 4, name: "d", user: 7_000_000),
-            makeCounter(pid: 5, name: "e", user: 3_000_000),
-            makeCounter(pid: 6, name: "f", user: 9_000_000),
-            makeCounter(pid: 7, name: "g", user: 4_000_000)
-        ]
+        processIDs.map { makeCounter(pid: $0, name: "Process \($0)") },
+        processIDs.map { makeCounter(pid: $0, name: "Process \($0)", user: UInt64($0) * 1_000_000) }
     ])
     let clock = TimeStub(0)
     let reader = LiveProcessEnergyReader(
@@ -103,9 +88,7 @@ func secondSampleSortsByEnergyImpactAndCapsToFive() {
     clock.advance(1)
     let snapshot = reader.read()
 
-    #expect(snapshot.entries.count == 5)
-    #expect(snapshot.entries.first?.name == "f")
-    #expect(snapshot.entries.map(\.name) == ["f", "d", "b", "g", "e"])
+    #expect(snapshot.entries.map(\.pid) == Array(processIDs.suffix(15).reversed()))
 }
 
 @Test

@@ -6,9 +6,10 @@ struct ProcessEnergySectionView: View {
     let presentation: ProcessEnergySectionPresentation
 
     @State private var showsMoreProcesses = false
+    private let initialCount = 5
 
     var body: some View {
-        let remainingCount = max(presentation.entries.count - 3, 0)
+        let remainingCount = max(presentation.entries.count - initialCount, 0)
 
         VStack(alignment: .leading, spacing: 5) {
             HStack {
@@ -22,7 +23,7 @@ struct ProcessEnergySectionView: View {
                 UnavailableCaption(unavailableMessage)
             }
 
-            ForEach(presentation.entries.prefix(3)) { entry in
+            ForEach(presentation.entries.prefix(initialCount)) { entry in
                 ProcessEnergyRow(entry: entry)
             }
 
@@ -31,7 +32,8 @@ struct ProcessEnergySectionView: View {
                     HStack(spacing: 5) {
                         Image(systemName: showsMoreProcesses ? "chevron.down" : "chevron.right")
                             .font(.system(size: 9, weight: .semibold))
-                        Text("\(remainingCount) more \(remainingCount == 1 ? "process" : "processes")")
+                        Text(showsMoreProcesses ? "Show fewer processes"
+                             : "Show \(remainingCount) more \(remainingCount == 1 ? "process" : "processes")")
                             .font(.system(size: 11))
                         Spacer(minLength: 0)
                     }
@@ -43,7 +45,7 @@ struct ProcessEnergySectionView: View {
                 .accessibilityValue(showsMoreProcesses ? "Expanded" : "Collapsed")
                 if showsMoreProcesses {
                     VStack(alignment: .leading, spacing: 5) {
-                        ForEach(presentation.entries.dropFirst(3)) { entry in
+                        ForEach(presentation.entries.dropFirst(initialCount)) { entry in
                             ProcessEnergyRow(entry: entry)
                         }
                     }

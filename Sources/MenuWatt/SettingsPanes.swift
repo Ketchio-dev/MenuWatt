@@ -92,7 +92,6 @@ struct SettingsPaneTitle: View {
     }
 }
 
-/// Flat groups share the same alignment; only live cleanup status gets a surface.
 struct SettingsCard<Content: View>: View {
     let title: String
     let systemImage: String
@@ -105,17 +104,24 @@ struct SettingsCard<Content: View>: View {
     }
 
     var body: some View {
-        VStack(alignment: .leading, spacing: 8) {
+        VStack(alignment: .leading, spacing: 7) {
             HStack(spacing: 7) {
                 Image(systemName: systemImage).accessibilityHidden(true)
                 Text(title).accessibilityAddTraits(.isHeader)
-                Rectangle().fill(SettingsTheme.rule).frame(height: 1).padding(.leading, 4)
             }
-            .font(.system(size: 11, weight: .semibold))
+            .font(.system(size: 12, weight: .semibold))
             .foregroundStyle(.secondary)
-            .padding(.bottom, 2)
+            .padding(.leading, 2)
 
-            content
+            VStack(alignment: .leading, spacing: 4) { content }
+                .padding(.horizontal, 12)
+                .padding(.vertical, 6)
+                .frame(maxWidth: .infinity, alignment: .leading)
+                .background(SettingsTheme.inset, in: RoundedRectangle(cornerRadius: 9))
+                .overlay {
+                    RoundedRectangle(cornerRadius: 9).strokeBorder(SettingsTheme.rule.opacity(0.7))
+                        .allowsHitTesting(false)
+                }
         }
         .frame(maxWidth: .infinity, alignment: .leading)
     }

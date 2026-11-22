@@ -72,21 +72,12 @@ struct SettingsSidebar: View {
                     .resizable()
                     .frame(width: 32, height: 32)
                     .accessibilityHidden(true)
-                VStack(alignment: .leading, spacing: 3) {
-                    HStack(spacing: 4) {
-                        Text("MenuWatt")
-                            .font(.system(size: 14, weight: .semibold))
-                        SettingsKetchupMark()
-                    }
-                    Text(versionString)
-                        .font(.system(size: 10, design: .monospaced))
-                        .foregroundStyle(.secondary)
-                }
+                Text("MenuWatt").font(.system(size: 14, weight: .semibold))
                 Spacer(minLength: 0)
             }
             .padding(.horizontal, 14)
             .padding(.top, 22)
-            .padding(.bottom, 24)
+            .padding(.bottom, 18)
 
             VStack(alignment: .leading, spacing: 4) {
                 ForEach(SettingsPane.allCases) { pane in
@@ -100,18 +91,7 @@ struct SettingsSidebar: View {
             .padding(.horizontal, 10)
 
             Spacer()
-
-            Text("Power & system metrics")
-                .font(.system(size: 10))
-                .foregroundStyle(.secondary)
-                .padding(.horizontal, 18)
-                .padding(.bottom, 18)
         }
-    }
-
-    private var versionString: String {
-        let version = Bundle.main.infoDictionary?["CFBundleShortVersionString"] as? String ?? "—"
-        return "Version \(version)"
     }
 
     private var appIconImage: NSImage {
@@ -148,13 +128,6 @@ struct SidebarRow: View {
                     .fill(isSelected ? SettingsTheme.accent.opacity(0.12)
                           : Color.primary.opacity(isHovered ? 0.04 : 0))
             )
-            .overlay(alignment: .leading) {
-                if isSelected {
-                    RoundedRectangle(cornerRadius: 1)
-                        .fill(SettingsTheme.accent)
-                        .frame(width: 3, height: 18)
-                }
-            }
             .foregroundStyle(isSelected ? SettingsTheme.accent : Color.primary)
             .contentShape(RoundedRectangle(cornerRadius: 6))
         }

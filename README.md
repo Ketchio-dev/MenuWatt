@@ -33,8 +33,8 @@ brew install --cask menuwatt
 In **Settings → Overview → Dashboard**, turn **Show graphs** off for a shorter
 popover. Current values and background sampling continue; the preference survives
 relaunch. Click anywhere on the CPU, memory, fan or network header row to expand
-its details, not just the chevron. Top Energy initially shows three processes;
-the full **more processes** row reveals the rest.
+its details, not just the chevron. Top Energy shows up to five processes at first.
+Use **Show more processes** to see up to 15 ranked processes in the dashboard.
 The dashboard scrolls when needed and keeps Settings/Quit in its footer.
 
 Cycle count and power-source metadata no longer occupy a dashboard row. Menu bar

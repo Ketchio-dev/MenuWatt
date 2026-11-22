@@ -399,10 +399,10 @@ struct SettingsRenderingTests {
             #expect(node.frame.width >= 300, "The whole metric row must be a target")
             #expect(node.frame.height >= 24)
         }
-        for label in ["Settings", "Quit MenuWatt", "2 more processes"] {
+        for label in ["Settings", "Quit MenuWatt", "Show 10 more processes"] {
             let node = try #require(nodes.first { $0.role == NSAccessibility.Role.button.rawValue && $0.text.contains(label) })
-            #expect(node.frame.height >= (label == "2 more processes" ? 20 : 24))
-            if label == "2 more processes" { #expect(node.frame.width >= 300) }
+            #expect(node.frame.height >= (label == "Show 10 more processes" ? 20 : 24))
+            if label == "Show 10 more processes" { #expect(node.frame.width >= 300) }
         }
         let settings = SettingsRenderingFixture(pane: .menuBar)
         defer { settings.dispose() }
@@ -437,7 +437,7 @@ struct SettingsRenderingTests {
         #expect(withGraphs.metricsHeight > withoutGraphs.metricsHeight + 100)
         #expect(withGraphs.contentHeight > withoutGraphs.contentHeight + 80)
         #expect(withGraphs.contentHeight <= 641)
-        #expect(withoutGraphs.contentHeight < 500)
+        #expect(withoutGraphs.contentHeight < 550)
         #expect(!withoutGraphs.text.contains("Sys"))
         let compactHeight = withoutGraphs.contentHeight
         withoutGraphs.press("CPU details")
@@ -464,14 +464,15 @@ struct SettingsRenderingTests {
         try await withoutGraphs.settleLayout()
         #expect(withoutGraphs.text.contains { $0.contains("↓") && $0.contains("↑") })
         withoutGraphs.press("Network totals")
-        #expect(!withoutGraphs.text.contains { $0.contains("Sample Process 4") })
-        withoutGraphs.press("2 more processes")
-        try await withoutGraphs.settleLayout()
-        #expect(withoutGraphs.text.contains { $0.contains("Sample Process 4") })
         #expect(withoutGraphs.text.contains { $0.contains("Sample Process 5") })
-        withoutGraphs.press("2 more processes")
+        #expect(!withoutGraphs.text.contains { $0.contains("Sample Process 6") })
+        withoutGraphs.press("Show 10 more processes")
         try await withoutGraphs.settleLayout()
-        #expect(!withoutGraphs.text.contains { $0.contains("Sample Process 4") })
+        #expect(withoutGraphs.text.contains { $0.contains("Sample Process 6") })
+        #expect(withoutGraphs.text.contains { $0.contains("Sample Process 15") })
+        withoutGraphs.press("Show fewer processes")
+        try await withoutGraphs.settleLayout()
+        #expect(!withoutGraphs.text.contains { $0.contains("Sample Process 6") })
         withGraphs.press("Settings")
         withoutGraphs.press("Quit MenuWatt")
         #expect(withGraphs.settingsPresses == 1)
@@ -571,7 +572,7 @@ private final class DashboardRenderingFixture {
             fan: .init(fans: [.init(index: 0, rpm: 1500, maxRpm: 5000), .init(index: 1, rpm: 1700, maxRpm: 5000)]),
             network: .init(downloadBytesPerSecond: 100_000, uploadBytesPerSecond: 90_000,
                            totalDownBytes: 3_540_000_000, totalUpBytes: 6_640_000_000, history: history))
-        let processes = ProcessEnergySnapshot(entries: (1...5).map {
+        let processes = ProcessEnergySnapshot(entries: (1...15).map {
             .init(pid: Int32.max - Int32($0), name: "Sample Process \($0)", energyImpact: Double(100 - $0), cpuPercent: 10)
         })
         let sprite = SpriteRenderer.image(for: .run1)
