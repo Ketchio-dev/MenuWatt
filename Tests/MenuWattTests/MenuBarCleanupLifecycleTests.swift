@@ -271,7 +271,10 @@ func cleanupAutoCollapseAndRestoreCancelRevealTimer() async throws {
     controller.showAllItems()
     fake.completions.last!(nil)
     #expect(controller.status == "All app icons are revealed.")
-    try await Task.sleep(for: .milliseconds(80))
+    let deadline = ContinuousClock.now.advanced(by: .seconds(2))
+    while controller.isExpanded, ContinuousClock.now < deadline {
+        try await Task.sleep(for: .milliseconds(10))
+    }
     #expect(!controller.isExpanded)
     #expect(!fake.plans.last!.allowedSystemItems.contains(5))
     controller.showAllItems()
