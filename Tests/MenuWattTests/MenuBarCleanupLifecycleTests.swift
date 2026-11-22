@@ -220,12 +220,16 @@ func cleanupActivationTimeoutIgnoresLateSuccessAndAllowsRetry() async throws {
     defer { fake.cleanup(controller) }
     controller.enabled = true
     controller.start()
-    try await Task.sleep(for: .milliseconds(80))
+    let deadline = ContinuousClock.now.advanced(by: .seconds(2))
+    while controller.errorMessage == nil, ContinuousClock.now < deadline {
+        try await Task.sleep(for: .milliseconds(10))
+    }
+    try #require(controller.errorMessage?.contains("did not finish") == true)
     #expect(fake.sessions[0].invalidations == 1)
-    #expect(controller.errorMessage?.contains("did not finish") == true)
     fake.completions[0](nil)
     #expect(controller.status == "The original menu bar has been restored.")
     controller.refresh()
+    try #require(fake.completions.count == 2)
     fake.completions[1](nil)
     #expect(controller.errorMessage == nil)
     #expect(controller.status == "Menu bar cleanup is active.")
