@@ -37,13 +37,13 @@ public final class LiveSystemSnapshotReader {
 
     public init() {
         self.readers = .live
-        self.clock = { Date().timeIntervalSince1970 }
+        self.clock = { ProcessInfo.processInfo.systemUptime }
         self.previousCPUCounters = readers.readCPUCounters()
         self.previousNetworkCounters = readers.readNetworkCounters()
         self.previousNetworkTimestamp = clock()
     }
 
-    init(readers: Readers, clock: @Sendable @escaping () -> TimeInterval = { Date().timeIntervalSince1970 }) {
+    init(readers: Readers, clock: @Sendable @escaping () -> TimeInterval = { ProcessInfo.processInfo.systemUptime }) {
         self.readers = readers
         self.clock = clock
         self.previousCPUCounters = readers.readCPUCounters()
@@ -72,10 +72,16 @@ public final class LiveSystemSnapshotReader {
             return .unavailable
         }
 
-        let userDelta = max(0, counters.user - previousCPUCounters.user)
-        let systemDelta = max(0, counters.system - previousCPUCounters.system)
-        let idleDelta = max(0, counters.idle - previousCPUCounters.idle)
-        let niceDelta = max(0, counters.nice - previousCPUCounters.nice)
+        // host_statistics tick counters can wrap or reset. Re-prime rather than
+        // subtracting UInt64 values first, which traps before max() can clamp.
+        guard counters.user >= previousCPUCounters.user,
+              counters.system >= previousCPUCounters.system,
+              counters.idle >= previousCPUCounters.idle,
+              counters.nice >= previousCPUCounters.nice else { return .unavailable }
+        let userDelta = counters.user - previousCPUCounters.user
+        let systemDelta = counters.system - previousCPUCounters.system
+        let idleDelta = counters.idle - previousCPUCounters.idle
+        let niceDelta = counters.nice - previousCPUCounters.nice
         let totalDelta = userDelta + systemDelta + idleDelta + niceDelta
 
         guard totalDelta > 0 else {
@@ -358,32 +364,7 @@ private enum SystemReaders {
     }
 
     static func readNetworkCounters() -> NetworkCounters? {
-        var ifapPointer: UnsafeMutablePointer<ifaddrs>?
-        guard getifaddrs(&ifapPointer) == 0, let first = ifapPointer else {
-            return nil
-        }
-        defer { freeifaddrs(first) }
-
-        var totalDown: UInt64 = 0
-        var totalUp: UInt64 = 0
-        var current: UnsafeMutablePointer<ifaddrs>? = first
-        while let ptr = current {
-            let ifa = ptr.pointee
-            current = ifa.ifa_next
-
-            guard let addr = ifa.ifa_addr else { continue }
-            guard Int32(addr.pointee.sa_family) == AF_LINK else { continue }
-            let flags = Int32(ifa.ifa_flags)
-            guard (flags & IFF_UP) != 0 else { continue }
-            guard (flags & IFF_LOOPBACK) == 0 else { continue }
-            guard let dataPointer = ifa.ifa_data else { continue }
-
-            let data = dataPointer.assumingMemoryBound(to: if_data.self).pointee
-            totalDown &+= UInt64(data.ifi_ibytes)
-            totalUp &+= UInt64(data.ifi_obytes)
-        }
-
-        return NetworkCounters(downBytes: totalDown, upBytes: totalUp)
+        NetworkCounterReader.read()
     }
 
     private static func readSwapUsageBytes() -> UInt64? {

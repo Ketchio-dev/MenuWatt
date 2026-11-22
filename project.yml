@@ -6,12 +6,39 @@ options:
   xcodeVersion: "16.0"
   generateEmptyDirectories: true
 
+configs:
+  Debug: debug
+  Release: release
+  CleanupPreview: release
+
 packages:
   swift-testing:
     url: https://github.com/swiftlang/swift-testing.git
     exactVersion: "6.2.4"
 
 targets:
+  CMenuBar:
+    type: framework
+    platform: macOS
+    sources:
+      - path: Sources/CMenuBar
+    settings:
+      base:
+        PRODUCT_BUNDLE_IDENTIFIER: com.junsu.menuwatt.cmenubar
+        PRODUCT_NAME: CMenuBar
+        CLANG_ENABLE_MODULES: true
+        CLANG_ENABLE_OBJC_ARC: true
+        DEFINES_MODULE: true
+        GENERATE_INFOPLIST_FILE: true
+        CODE_SIGN_IDENTITY: "-"
+        CODE_SIGN_STYLE: Manual
+        MACOSX_DEPLOYMENT_TARGET: "13.0"
+        HEADER_SEARCH_PATHS:
+          - "$(SRCROOT)/Sources/CMenuBar/include"
+        OTHER_LDFLAGS:
+          - "-framework"
+          - "Carbon"
+
   MenuWattCore:
     type: framework
     platform: macOS
@@ -82,8 +109,8 @@ targets:
       base:
         PRODUCT_BUNDLE_IDENTIFIER: com.junsu.menuwatt
         PRODUCT_NAME: MenuWatt
-        MARKETING_VERSION: "1.1.1"
-        CURRENT_PROJECT_VERSION: "5"
+        MARKETING_VERSION: "1.2.0"
+        CURRENT_PROJECT_VERSION: "6"
         ENABLE_HARDENED_RUNTIME: YES
         GENERATE_INFOPLIST_FILE: true
         INFOPLIST_FILE: Packaging/Info.plist
@@ -97,12 +124,19 @@ targets:
         COMBINE_HIDPI_IMAGES: true
         LD_RUNPATH_SEARCH_PATHS:
           - "@executable_path/../Frameworks"
+      configs:
+        CleanupPreview:
+          PRODUCT_BUNDLE_IDENTIFIER: com.junsu.menuwatt.cleanup-preview
+          PRODUCT_NAME: MenuWattPreview
+          INFOPLIST_KEY_CFBundleDisplayName: "MenuWatt Preview"
     dependencies:
       - target: MenuWattCore
         embed: true
       - target: MenuWattSystem
         embed: true
       - target: CIOReport
+        embed: true
+      - target: CMenuBar
         embed: true
 
   MenuWattTests:

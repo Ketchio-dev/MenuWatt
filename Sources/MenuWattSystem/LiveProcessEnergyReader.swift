@@ -35,7 +35,7 @@ public final class LiveProcessEnergyReader {
 
         static let live = Readers(
             listProcesses: ProcessReaders.listProcesses,
-            clock: { Date().timeIntervalSince1970 }
+            clock: { ProcessInfo.processInfo.systemUptime }
         )
     }
 
@@ -45,7 +45,7 @@ public final class LiveProcessEnergyReader {
     // intentionally tunable in one place.
     private static let cpuNsWeight = 1.0 / 1_000_000  // 1 per ms of CPU time
     private static let wakeupWeight = 0.5              // per wakeup
-    private static let topCount = 5
+    private static let topCount = 15
 
     private let readers: Readers
     private var previousCounters: [Int32: ProcessEnergyCounters] = [:]

@@ -3,6 +3,14 @@ import SwiftUI
 import MenuWattCore
 import MenuWattSystem
 
+/// Publishes live battery, system and process snapshots plus the animated
+/// menu bar sprite.
+///
+/// Wiring only: sampling cadence lives in `MonitorRefreshScheduler`, sprite
+/// ticks in `MonitorSpriteAnimator`, transition logging in
+/// `MonitorTransitionLog`. Public API (`init(sampler:configuration:)`,
+/// `start/stop/refreshNow/setRefreshInterval`, published snapshots) is
+/// unchanged.
 @MainActor
 final class PowerMonitor: ObservableObject {
     struct Configuration: Sendable {
@@ -19,25 +27,23 @@ final class PowerMonitor: ObservableObject {
     @Published private(set) var systemSnapshot = SystemSnapshot.unavailable
     @Published private(set) var processSnapshot = ProcessEnergySnapshot.unavailable
     @Published private(set) var currentFrame = SpriteRenderer.image(for: .run1)
-
     private(set) var currentSpriteFrame = SpriteFrame.run1
 
-    private var refreshLoopTask: Task<Void, Never>?
-    private var refreshTask: Task<Void, Never>?
-    private var animationLoopTask: Task<Void, Never>?
-    private var frameIndex = 0
-    private var refreshSequence: UInt64 = 0
-    private var isRunning = false
-
+    private let scheduler: MonitorRefreshScheduler
+    private let animator: MonitorSpriteAnimator
     private let sampler: any MonitorSampling
-    private var configuration: Configuration
     private let logger = MenuWattDiagnostics.monitoring
 
     var batteryTransitionHandler: ((BatterySnapshot, BatterySnapshot) -> Void)?
 
+    var refreshInterval: TimeInterval { scheduler.refreshInterval }
+
     func setRefreshInterval(_ interval: TimeInterval) {
-        guard configuration.refreshInterval != interval else { return }
-        configuration.refreshInterval = interval
+        guard scheduler.refreshInterval != interval else { return }
+        scheduler.refreshInterval = interval
+        if scheduler.running {
+            scheduler.restartLoop { [weak self] in self?.requestRefresh(resetAnimation: false) }
+        }
         logger.info("Refresh interval updated to \(interval, privacy: .public)s")
     }
 
@@ -46,90 +52,52 @@ final class PowerMonitor: ObservableObject {
         configuration: Configuration = .live
     ) {
         self.sampler = sampler
-        self.configuration = configuration
-        let initialFrame = BoochiPresentation.make(for: snapshot.state).fallbackFrame
-        currentSpriteFrame = initialFrame
-        currentFrame = SpriteRenderer.image(for: initialFrame)
+        scheduler = MonitorRefreshScheduler(refreshInterval: configuration.refreshInterval)
+        animator = MonitorSpriteAnimator(
+            minimumInterval: configuration.animationMinimumInterval,
+            initialState: BatterySnapshot.unavailable.state
+        )
+        currentSpriteFrame = animator.currentSpriteFrame
+        currentFrame = animator.currentFrame
     }
 
     func start() {
-        isRunning = true
         logger.info("Power monitor started")
-
-        if refreshLoopTask == nil {
-            requestRefresh(resetAnimation: true)
-            refreshLoopTask = Task { [weak self] in
-                await self?.runRefreshLoop()
+        scheduler.start(
+            requestImmediate: { [weak self] in self?.requestRefresh(resetAnimation: true) },
+            requestTick: { [weak self] in self?.requestRefresh(resetAnimation: false) }
+        )
+        animator.start(
+            tick: { [weak self] in
+                guard let self else { return (state: .unavailable, cpuUsage: 0) }
+                return (state: self.snapshot.state, cpuUsage: self.systemSnapshot.cpu.totalUsage)
+            },
+            onFrameChange: { [weak self] in
+                self?.publishAnimationFrame()
             }
-        }
-
-        if animationLoopTask == nil {
-            animationLoopTask = Task { [weak self] in
-                await self?.runAnimationLoop()
-            }
-        }
+        )
     }
 
     func stop() {
-        isRunning = false
-        refreshSequence &+= 1
+        scheduler.stop()
+        animator.stop()
         logger.info("Power monitor stopped")
-
-        refreshLoopTask?.cancel()
-        refreshLoopTask = nil
-
-        refreshTask?.cancel()
-        refreshTask = nil
-
-        animationLoopTask?.cancel()
-        animationLoopTask = nil
     }
 
     func refreshNow() {
         requestRefresh(resetAnimation: true)
     }
 
-    private func runRefreshLoop() async {
-        while !Task.isCancelled {
-            try? await Task.sleep(nanoseconds: nanoseconds(for: configuration.refreshInterval))
-            guard !Task.isCancelled else { return }
-            requestRefresh(resetAnimation: false)
-        }
-    }
-
-    private func runAnimationLoop() async {
-        while !Task.isCancelled {
-            let interval = BoochiAnimationPolicy.interval(
-                for: snapshot.state,
-                cpuUsage: systemSnapshot.cpu.totalUsage,
-                minimumInterval: configuration.animationMinimumInterval
-            )
-            try? await Task.sleep(nanoseconds: nanoseconds(for: interval))
-            guard !Task.isCancelled else { return }
-            advanceFrame()
-        }
-    }
-
     private func requestRefresh(resetAnimation: Bool) {
-        guard isRunning else { return }
-
-        refreshSequence &+= 1
-        let sequence = refreshSequence
-
-        refreshTask?.cancel()
-        refreshTask = Task { [weak self, sampler] in
-            let payload = await sampler.sample()
-            guard !Task.isCancelled else { return }
-            await MainActor.run {
-                self?.applyIfCurrent(payload, resetAnimation: resetAnimation, sequence: sequence)
-            }
+        scheduler.requestSample(sampler: sampler) { [weak self] payload, sequence in
+            self?.applyIfCurrent(payload, resetAnimation: resetAnimation, sequence: sequence)
         }
     }
 
     private func applyIfCurrent(_ payload: SamplePayload, resetAnimation: Bool, sequence: UInt64) {
-        guard isRunning, sequence == refreshSequence else { return }
+        guard scheduler.isCurrent(sequence) else { return }
         apply(payload, resetAnimation: resetAnimation)
-        refreshTask = nil
+        scheduler.finishRequest()
     }
 
     private func apply(_ payload: SamplePayload, resetAnimation: Bool) {
@@ -141,65 +109,22 @@ final class PowerMonitor: ObservableObject {
         snapshot = nextSnapshot
         systemSnapshot = payload.system
         processSnapshot = payload.processes
-        logTransitions(fromBattery: previousBattery, toBattery: nextSnapshot, fromSystem: previousSystem, toSystem: payload.system)
+        MonitorTransitionLog.log(
+            fromBattery: previousBattery, toBattery: nextSnapshot,
+            fromSystem: previousSystem, toSystem: payload.system
+        )
         batteryTransitionHandler?(previousBattery, nextSnapshot)
 
         if resetAnimation || previousState != nextSnapshot.state {
-            frameIndex = 0
+            animator.reset()
         }
 
-        updateCurrentFrame()
+        animator.refresh(state: nextSnapshot.state)
+        publishAnimationFrame()
     }
 
-    private func advanceFrame() {
-        let presentation = BoochiPresentation.make(for: snapshot.state)
-        let frames = presentation.animationFrames
-        guard !frames.isEmpty else { return }
-
-        frameIndex = (frameIndex + 1) % frames.count
-        updateCurrentFrame()
-    }
-
-    private func updateCurrentFrame() {
-        let presentation = BoochiPresentation.make(for: snapshot.state)
-        let frames = presentation.animationFrames
-        let safeIndex = frames.isEmpty ? 0 : frameIndex % frames.count
-        let nextFrame = frames.isEmpty ? presentation.fallbackFrame : frames[safeIndex]
-
-        currentSpriteFrame = nextFrame
-        currentFrame = SpriteRenderer.image(for: nextFrame)
-    }
-
-    private func nanoseconds(for interval: TimeInterval) -> UInt64 {
-        UInt64(max(interval, 0.001) * 1_000_000_000)
-    }
-
-    private func logTransitions(
-        fromBattery previousBattery: BatterySnapshot,
-        toBattery nextBattery: BatterySnapshot,
-        fromSystem previousSystem: SystemSnapshot,
-        toSystem nextSystem: SystemSnapshot
-    ) {
-        if previousBattery.state != nextBattery.state {
-            logger.info("Battery state changed to \(String(describing: nextBattery.state), privacy: .public)")
-        }
-
-        logAvailabilityChange(component: "battery", wasAvailable: isBatteryPresent(previousBattery.state), isAvailable: isBatteryPresent(nextBattery.state))
-        logAvailabilityChange(component: "cpu", wasAvailable: previousSystem.cpu.isAvailable, isAvailable: nextSystem.cpu.isAvailable)
-        logAvailabilityChange(component: "memory", wasAvailable: previousSystem.memory.isAvailable, isAvailable: nextSystem.memory.isAvailable)
-        logAvailabilityChange(component: "storage", wasAvailable: previousSystem.storage.isAvailable, isAvailable: nextSystem.storage.isAvailable)
-    }
-
-    private func isBatteryPresent(_ state: BatteryState) -> Bool {
-        state != .unavailable && state != .absent
-    }
-
-    private func logAvailabilityChange(component: StaticString, wasAvailable: Bool, isAvailable: Bool) {
-        guard wasAvailable != isAvailable else { return }
-        if isAvailable {
-            logger.info("\(component, privacy: .public) metrics recovered")
-        } else {
-            logger.error("\(component, privacy: .public) metrics became unavailable")
-        }
+    private func publishAnimationFrame() {
+        currentSpriteFrame = animator.currentSpriteFrame
+        currentFrame = animator.currentFrame
     }
 }

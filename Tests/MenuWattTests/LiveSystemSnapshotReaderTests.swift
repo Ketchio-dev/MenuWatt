@@ -56,6 +56,24 @@ func cpuIsPrimedDuringInitializationSoFirstReadProducesUsage() {
 }
 
 @Test
+func resetCpuCountersReprimeWithoutUnsignedUnderflow() {
+    let queue = CPUCountersQueue([
+        .init(user: 1_000, system: 500, idle: 2_000, nice: 100),
+        .init(user: 10, system: 5, idle: 20, nice: 1),
+        .init(user: 20, system: 10, idle: 35, nice: 1)
+    ])
+    let reader = LiveSystemSnapshotReader(readers: .init(
+        readCPUCounters: { queue.next() }, readMemoryStats: { nil }, readStorageStats: { nil },
+        readKernelPressureLevel: { .normal }, readGPUUtilization: { nil }, readFans: { nil },
+        readNetworkCounters: { nil }))
+    #expect(!reader.read().cpu.isAvailable)
+    let recovered = reader.read().cpu
+    #expect(recovered.isAvailable)
+    #expect(abs(recovered.totalUsage - 50) < 0.001)
+    #expect(recovered.history.count == 1)
+}
+
+@Test
 func memoryAndStorageBecomeUnavailableWhenReadersFailIndependently() {
     let countersQueue = CPUCountersQueue([
         CPUCounters(user: 10, system: 10, idle: 80, nice: 0),

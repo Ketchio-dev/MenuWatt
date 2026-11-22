@@ -2,12 +2,19 @@ import Foundation
 import MenuWattCore
 
 @MainActor
+protocol NotificationSending {
+    func notify(kind: NotificationManager.Kind, title: String, body: String, userInfo: [String: String])
+}
+
+extension NotificationManager: NotificationSending {}
+
+@MainActor
 enum NotificationDispatcher {
     static func evaluate(
         previous: BatterySnapshot,
         next: BatterySnapshot,
         preferences: AppPreferences,
-        notifier: NotificationManager = .shared
+        notifier: any NotificationSending = NotificationManager.shared
     ) {
         if preferences.notifyChargeComplete,
            isCharging(previous.state),
@@ -15,7 +22,8 @@ enum NotificationDispatcher {
             notifier.notify(
                 kind: .chargeComplete,
                 title: "Battery Charged",
-                body: "Your Mac is now fully charged."
+                body: "Your Mac is now fully charged.",
+                userInfo: [:]
             )
         }
 
@@ -28,7 +36,8 @@ enum NotificationDispatcher {
             notifier.notify(
                 kind: .lowBattery,
                 title: "Low Battery",
-                body: "Battery is at \(next.percentage)%. Consider plugging in."
+                body: "Battery is at \(next.percentage)%. Consider plugging in.",
+                userInfo: [:]
             )
         }
 
